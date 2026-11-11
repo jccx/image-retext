@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--__PWA_HEAD__-->
+<title>图片改字</title>
+<link rel="stylesheet" href="/*__UIFONT__*/">
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <h1 class="mark" aria-label="图片改字">图片改<span class="mark-sel">字</span></h1>
+    <div class="bar-actions">
+      <button type="button" id="btnOpen" class="btn">打开图片</button>
+      <button type="button" id="btnUndo" class="btn" disabled>撤销</button>
+      <button type="button" id="btnSave" class="btn primary">保存</button>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" hidden>
+    <input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2,font/*" hidden>
+  </header>
+
+  <main id="stage" class="stage" aria-label="图片工作区">
+    <canvas id="view"></canvas>
+    <div id="sel" class="sel" hidden>
+      <i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i>
+    </div>
+    <p id="stageNote" class="stage-note"></p>
+    <div class="zoom" role="group" aria-label="缩放">
+      <button type="button" id="zOut" aria-label="缩小">−</button>
+      <button type="button" id="zFit">适应</button>
+      <button type="button" id="zIn" aria-label="放大">+</button>
+    </div>
+    <div id="dropHint" class="drop-hint" hidden>松开，打开这张图片</div>
+  </main>
+
+  <aside id="panel" class="panel">
+    <section id="pIdle" class="idle">
+      <ol class="steps">
+        <li><b>框住要改的字</b><span>在图片上拖出一个框，只包住文字和它的底色。一次框一种样式。</span></li>
+        <li><b>核对原文字</b><span>中文、英文、中英混排都可以。用它比对出字体、字重、字号、字距和颜色。</span></li>
+        <li><b>输入新文字，点应用</b><span>旧字被擦掉，背景补回来。字数相同，新字落在原来的位置；字数不同，保持原来的缩进、字距、间隔和行距。</span></li>
+      </ol>
+      <button type="button" id="btnOffline" class="offline-row" hidden><span>字体</span><b id="offlineState">在线加载</b><i>设置离线使用</i></button>
+      <p class="fine">双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片在你的设备上处理。原文字在 Claude 里打开时由 Claude 来读（只发送框里那一小块，并会先问你是否允许）；在分享出去的网页里由页面自带的识别在你的设备上读，常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。</p>
+    </section>
+
+    <section id="pEdit" class="edit" hidden>
+      <div class="field">
+        <label for="inOrig">原文字<small>图片里现在写的</small></label>
+        <div class="row">
+          <textarea id="inOrig" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="照着图片输入，用来比对字体"></textarea>
+          <button type="button" id="btnOcr" class="btn" hidden>识别</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="inNew">新文字</label>
+        <textarea id="inNew" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="要换成什么"></textarea>
+      </div>
+
+      <div class="spec" id="spec">
+        <div class="spec-sample" id="specSample"><span id="specText">Aa</span></div>
+        <dl class="spec-meta">
+          <div><dt>字体</dt><dd id="mFont">—</dd></div>
+          <div><dt>字重</dt><dd id="mWeight" class="num">—</dd></div>
+          <div><dt>字号</dt><dd id="mSize" class="num">—</dd></div>
+          <div><dt>颜色</dt><dd class="num"><i id="mSwatch" class="sw"></i><span id="mColor">—</span></dd></div>
+          <div><dt>吻合</dt><dd id="mScore" class="num">—</dd></div>
+        </dl>
+      </div>
+      <p id="matchStatus" class="status" role="status"></p>
+      <div id="cands" class="cands" role="group" aria-label="其它接近的字体"></div>
+
+      <details id="tune" class="tune">
+        <summary>微调</summary>
+        <div class="grid">
+          <label for="selFamily">字体</label>
+          <div class="row">
+            <select id="selFamily"></select>
+            <button type="button" id="btnFont" class="btn">上传</button>
+          </div>
+          <label for="selWeight">字重</label>
+          <div class="row">
+            <select id="selWeight"></select>
+            <label class="check"><input type="checkbox" id="chkItalic"> 斜体</label>
+          </div>
+          <label for="numSize">字号</label>
+          <div class="stepper">
+            <button type="button" data-step="size" data-d="-1" aria-label="减小字号">−</button>
+            <input id="numSize" type="number" inputmode="decimal" step="0.5" min="1">
+            <button type="button" data-step="size" data-d="1" aria-label="增大字号">+</button>
+            <span class="unit">px</span>
+          </div>
+          <label for="numTrack">字距</label>
+          <div class="stepper">
+            <button type="button" data-step="track" data-d="-1" aria-label="收紧字距">−</button>
+            <input id="numTrack" type="number" inputmode="decimal" step="1">
+            <button type="button" data-step="track" data-d="1" aria-label="放宽字距">+</button>
+            <span class="unit">‰</span>
+          </div>
+          <label for="inColor">颜色</label>
+          <div class="row">
+            <input id="inColor" type="color" value="#000000">
+            <input id="inHex" type="text" class="num" maxlength="7" spellcheck="false" autocomplete="off" aria-label="十六进制颜色">
+          </div>
+          <span class="lbl" id="lblAlign">对齐</span>
+          <div class="seg" role="group" aria-labelledby="lblAlign">
+            <button type="button" data-align="left">左</button>
+            <button type="button" data-align="center">中</button>
+            <button type="button" data-align="right">右</button>
+          </div>
+          <span class="lbl" id="lblNudge">位置</span>
+          <div class="seg nudge" role="group" aria-labelledby="lblNudge">
+            <button type="button" data-nx="-1" data-ny="0" aria-label="左移">←</button>
+            <button type="button" data-nx="0" data-ny="-1" aria-label="上移">↑</button>
+            <button type="button" data-nx="0" data-ny="1" aria-label="下移">↓</button>
+            <button type="button" data-nx="1" data-ny="0" aria-label="右移">→</button>
+            <output id="outNudge" class="num">0, 0</output>
+          </div>
+          <label for="rngBlur">边缘柔化</label>
+          <div class="row"><input id="rngBlur" type="range" min="0" max="3" step="0.05"><output id="outBlur" class="num">0</output></div>
+          <label for="rngGrow">擦除范围</label>
+          <div class="row"><input id="rngGrow" type="range" min="0" max="12" step="1"><output id="outGrow" class="num">0</output></div>
+        </div>
+        <button type="button" id="btnMore" class="btn wide">在更多字体里再找一遍</button>
+      </details>
+
+      <div class="actions">
+        <button type="button" id="btnCancel" class="btn">取消</button>
+        <button type="button" id="btnErase" class="btn">只擦除</button>
+        <button type="button" id="btnCompare" class="btn">按住看原图</button>
+        <button type="button" id="btnApply" class="btn primary">应用</button>
+      </div>
+    </section>
+  </aside>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <div id="offSheet" class="sheet" hidden>
+    <div class="sheet-card" role="dialog" aria-labelledby="offTitle">
+      <h2 id="offTitle">离线使用</h2>
+      <div class="seg" role="radiogroup" aria-label="字体从哪里来">
+        <button type="button" role="radio" id="modeOnline" aria-checked="true">在线</button>
+        <button type="button" role="radio" id="modeOffline" aria-checked="false">离线</button>
+      </div>
+      <p id="offDesc"></p>
+      <div id="packList" class="packs"></div>
+      <p id="offStore" class="store"></p>
+      <div class="actions">
+        <button type="button" id="offGo" class="btn" hidden>下载</button>
+        <button type="button" id="offClose" class="btn primary">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-card" role="dialog" aria-labelledby="sheetTitle">
+      <h2 id="sheetTitle">保存图片</h2>
+      <p>长按下面的图片选“存储到照片”；电脑上右键选“图片另存为”。</p>
+      <div class="sheet-img"><img id="sheetImg" alt="修改后的图片"></div>
+      <div class="actions">
+        <button type="button" id="sheetShare" class="btn" hidden>存到相册 / 分享</button>
+        <a id="sheetLink" class="btn" download>直接下载</a>
+        <button type="button" id="sheetClose" class="btn primary">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+/*__JS__*/
+</script>
+</body>
+</html>
