@@ -28,6 +28,14 @@ The app itself is kept by a service worker, so it opens without a network either
 
 Measured on cleanly rendered single lines: common English text faces 99.2% of characters (89% of lines exact); Chinese 黑体/宋体 about 99% of characters (about 90% of lines). Handwriting, brush and display faces are read poorly; the app then asks for the text to be typed in.
 
+## Privacy and disclaimer · 隐私与声明
+
+- **Images never leave the device.** Opening, reading, editing and saving all happen in the browser. There is no backend: the app does not upload, store or collect images or text, and has no analytics or ads. It requests only its own program and font files from this site. GitHub Pages, as the host, keeps ordinary access logs (such as IP addresses); these contain no image content.
+- **Open source.** All code is in this repository under the GNU AGPL v3, so the statements above can be checked.
+- **Use at your own risk.** For lawful use only. Whoever edits an image is solely responsible for how the result is used and for any consequences. Do not use it to forge or alter identity documents, receipts, contracts, chat records, screenshots used as evidence, or to infringe others' rights. Provided "as is", without warranty; the authors accept no liability for any loss or legal consequence arising from its use.
+
+图片只在你的设备上处理，本应用没有后台，不上传、不保存、不收集图片和文字；源代码公开可查。修改后的图片如何使用及其后果，由使用者自行负责；请勿用于伪造证件、票据、合同、截图证据等违法或侵权用途。本工具按“现状”提供，开发者不承担任何责任。
+
 ## Build
 
 ```sh

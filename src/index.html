@@ -46,6 +46,7 @@
       </ol>
       <button type="button" id="btnOffline" class="offline-row" hidden><span>字体</span><b id="offlineState">在线加载</b><i>设置离线使用</i></button>
       <p class="fine">双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片在你的设备上处理。原文字在 Claude 里打开时由 Claude 来读（只发送框里那一小块，并会先问你是否允许）；在分享出去的网页里由页面自带的识别在你的设备上读，常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。</p>
+      <button type="button" id="btnPrivacy" class="link-btn" hidden>隐私与声明</button>
     </section>
 
     <section id="pEdit" class="edit" hidden>
@@ -156,10 +157,27 @@
     </div>
   </div>
 
+  <div id="privSheet" class="sheet" hidden>
+    <div class="sheet-card doc" role="dialog" aria-labelledby="privTitle">
+      <h2 id="privTitle">隐私与声明</h2>
+      <h3>图片不会离开你的设备</h3>
+      <p>打开、识别、改字、保存，全部在你的浏览器里完成。本应用没有后台服务器，不上传、不保存、不收集你的图片和文字，也没有统计或广告代码。</p>
+      <p>应用只向本站请求程序和字体文件。网站由 GitHub Pages 托管，GitHub 会像其它网站一样记录访问日志（例如 IP 地址），这些记录不含你的图片。</p>
+      <p>离线字体包和设置存在本机浏览器里，可以在“设置离线使用”里删除；删除这个网页的网站数据也会一并清除。</p>
+      <h3>源代码公开</h3>
+      <p>全部源代码以 GNU AGPL v3 开源，可以查看、核对上面的说法：<a href="https://github.com/jccx/image-retext" target="_blank" rel="noopener">github.com/jccx/image-retext</a></p>
+      <h3>使用责任</h3>
+      <p>本工具仅供合法用途。修改后的图片如何使用、由此产生的一切后果，由使用者自行负责。请勿用于伪造或篡改证件、票据、合同、聊天记录、截图证据等，或侵犯他人权利。</p>
+      <p>本工具按“现状”提供，不保证识别、字体匹配或修改结果准确；开发者不对因使用本工具造成的任何损失或法律责任负责。</p>
+      <div class="actions"><button type="button" id="privClose" class="btn primary">知道了</button></div>
+    </div>
+  </div>
+
   <div id="sheet" class="sheet" hidden>
     <div class="sheet-card" role="dialog" aria-labelledby="sheetTitle">
       <h2 id="sheetTitle">保存图片</h2>
       <p>长按下面的图片选“存储到照片”；电脑上右键选“图片另存为”。</p>
+      <p id="saveNote" class="save-note" hidden>修改后的图片请合法使用，后果由使用者自负。</p>
       <div class="sheet-img"><img id="sheetImg" alt="修改后的图片"></div>
       <div class="actions">
         <button type="button" id="sheetShare" class="btn" hidden>存到相册 / 分享</button>

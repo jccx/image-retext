@@ -109,6 +109,7 @@ function gfSpec(f, noItalic) {
   return n + ':wght@' + f.w.join(';');
 }
 function addCss(specs) {
+  if (BUILD === 'pages') return Promise.resolve(false);     // the installable build contacts no other site; all its fonts are hosted alongside
   return new Promise(res => {
     const l = document.createElement('link');
     let done = false;
@@ -138,7 +139,7 @@ function ensureCss(fams) {
   const flat = [];
   for (const f of fams) { if (f.stack) flat.push(...f.stack); else flat.push(f); }
   let need = [...new Set(flat)].filter(f => !f.sys && !cssState.has(f.n));
-  for (const f of need) if (SELF_FONTS[f.n]) cssState.set(f.n, addSelfCss(f).then(ok => ok || (navigator.onLine !== false && addCss([gfSpec(f)]))));
+  for (const f of need) if (SELF_FONTS[f.n]) cssState.set(f.n, addSelfCss(f).then(ok => ok || addCss([gfSpec(f)])));
   need = need.filter(f => !SELF_FONTS[f.n]);
   for (let i = 0; i < need.length; i += 6) {
     const chunk = need.slice(i, i + 6);
@@ -1228,7 +1229,7 @@ $('sheetClose').onclick = () => { $('sheet').hidden = true; const u = $('sheetIm
 /* ---------- keyboard, paste, drop ---------- */
 const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
 window.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { if (!$('offSheet').hidden) $('offClose').click(); else if (!$('sheet').hidden) $('sheetClose').click(); else if (S.edit) dropEdit(); }
+  if (e.key === 'Escape') { if (!$('privSheet').hidden) $('privClose').click(); else if (!$('offSheet').hidden) $('offClose').click(); else if (!$('sheet').hidden) $('sheetClose').click(); else if (S.edit) dropEdit(); }
   else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && S.edit) { e.preventDefault(); commit('text'); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing()) { e.preventDefault(); undo(); }
   else if (e.key === ' ' && !typing() && e.target === document.body) { S.space = true; e.preventDefault(); }
@@ -1349,6 +1350,10 @@ async function offDelete(keys) {
 }
 function offInit() {
   if (BUILD !== 'pages') return;
+  $('btnPrivacy').hidden = false;
+  $('btnPrivacy').onclick = () => { $('privSheet').hidden = false; };
+  $('privClose').onclick = () => { $('privSheet').hidden = true; };
+  $('saveNote').hidden = false;
   $('btnOffline').hidden = false;
   $('offlineState').textContent = offLabel();
   $('btnOffline').onclick = () => { $('offSheet').hidden = false; offRender(); };

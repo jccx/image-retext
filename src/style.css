@@ -247,3 +247,10 @@ input[type="range"] { accent-color: var(--accent); min-width: 0; }
 @media (display-mode: standalone) {
   .bar { padding-top: max(10px, env(safe-area-inset-top, 0px)); }
 }
+
+/* ---------- privacy & disclaimer ---------- */
+.link-btn { justify-self: start; border: 0; background: none; padding: 2px 0; color: var(--accent); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.sheet-card.doc h3 { margin: 6px 0 0; font-size: 14.5px; }
+.sheet-card.doc p { line-height: 1.6; }
+.sheet-card.doc a { color: var(--accent); word-break: break-all; }
+.save-note { color: var(--warn) !important; font-size: 12.5px !important; }

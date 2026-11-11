@@ -2,7 +2,7 @@
    - The app itself (page, icons, manifest) is kept on the device, so it opens without a network.
    - Fonts: answered from the downloaded packs (Cache Storage "retext-fonts") when present, otherwise from the network.
    - A new version is fetched in the background and used from the next launch. */
-const VERSION = '4674132c49';
+const VERSION = '7685faa65c';
 const SHELL = 'retext-shell-' + VERSION, FONTS = 'retext-fonts';
 const SHELL_FILES = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","fonts/packs.json","fonts/ibm-plex-mono/ibm-plex-mono.css","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2"];
 self.addEventListener('install', e => {
