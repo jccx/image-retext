@@ -807,7 +807,7 @@ async function runMatch() {
     if (S.sample && (oddChar || best.iou < 0.68)) { ed.ocr.reread = true; ed.ocr.auto = true; recognize('default'); }
     else if (oddChar || (ed.ocr.tier === 'local' && best.iou < 0.68)) ed.ocr.doubt = true;
   }
-  if (ed.ocr && ed.ocr.doubt && !S.sample) { ed.ocr.doubt = false; setStatus('有的字可能读错了，请核对上面的原文字。', true); }
+  if (ed.ocr && ed.ocr.doubt && !S.sample) { ed.ocr.doubt = false; setStatus(ed.ocr.reread && ed.ocr.tier === 'local' ? '这段字读得没把握，已填上最接近的结果，请核对改正。' : '有的字可能读错了，请核对上面的原文字。', true); }
   else if (best.iou < 0.55) setStatus('没找到很接近的字体。可以在“微调”里手动选，或上传字体文件。', true);
   else setStatus(ed.tier < 2 && scriptOf(text) === 'latin' && best.iou < 0.8 ? '不够像的话，“微调”里可以在更多字体里再找一遍。' : '');
   renderCands();
@@ -882,7 +882,7 @@ function refresh() {
   $('rngBlur').value = st.blur; $('outBlur').textContent = st.blur.toFixed(2).replace(/0$/, '');
   $('btnMore').hidden = ed.tier >= 2 || scriptOf(ed.origText || 'a') !== 'latin';
   $('btnOcr').textContent = ed.origText ? '重读' : '识别';
-  $('btnOcr').hidden = !S.sample && (OCR.failed || !!ed.origText);      // the built-in reader gives the same answer twice; reading again only helps with Claude
+  $('btnOcr').hidden = false;
   for (const ch of $('cands').children) ch.setAttribute('aria-pressed', ch.dataset.fam === st.fam.n ? 'true' : 'false');
 }
 function renderCands() {
@@ -978,18 +978,31 @@ function ocrCrop(ed) {
 }
 /* Read the original text of a fresh selection. Inside Claude the viewer's own Claude reads it; anywhere else
    (a shared link in a browser) the page's own reader does, entirely on the device. */
-async function readText(ed) {
+/* force: the user pressed 识别/重读 — retry a reader that failed to start, overwrite what is in the field,
+   and when the reader is unsure, still put its best guess there for the user to correct */
+async function readText(ed, force) {
   await Promise.race([S.sampleReady, new Promise(r => setTimeout(r, 1500))]);
   if (S.edit !== ed) return;
   if (S.sample) { recognize('quick'); return; }
-  const fail = () => setStatus('页面自带的识别没能启动（' + (OCR.err || '未知原因') + '）。请手动输入原文字，用来比对字体。', true);
-  if (OCR.failed) { if (!ed.origText) fail(); return; }
+  const fail = () => setStatus('页面自带的识别没能启动（' + (OCR.err || '未知原因') + '）。可以再点一次“识别”重试，或手动输入原文字。', true);
+  if (OCR.failed) {
+    if (!force) { if (!ed.origText) fail(); return; }
+    OCR.p = null; OCR.failed = false; OCR.err = '';
+  }
   $('btnOcr').disabled = true;
   try {
     const r = await readLocal(ed);
     if (S.edit !== ed) return;
-    const untouched = !ed.origText || (ed.ocr && ed.origText === ed.ocr.text);
-    if (r && r.text && untouched && r.text !== ed.origText) {
+    const untouched = force || !ed.origText || (ed.ocr && ed.origText === ed.ocr.text);
+    const guess = force && r && !r.text && r.raw ? r.raw : '';
+    if (guess) {
+      const mirror = !ed.newText || ed.newText === ed.origText;
+      ed.ocr = { tier: 'local', text: guess, reread: true, conf: r.conf, maybe: [], slots: [], doubt: true };
+      ed.varDone = false;
+      if (mirror) { ed.newText = ''; $('inNew').value = ''; }
+      setOrig(guess, true);
+      setStatus('这段字读得没把握，已填上最接近的结果，请核对改正后再继续。', true);
+    } else if (r && r.text && untouched && (force || r.text !== ed.origText)) {
       const mirror = !ed.newText || ed.newText === ed.origText;
       ed.ocr = { tier: 'local', text: r.text, reread: false, conf: r.conf, maybe: r.maybe, slots: r.slots };
       ed.varDone = false;
@@ -1143,9 +1156,10 @@ $('btnErase').onclick = () => commit('erase');
 $('btnOcr').onclick = () => {
   const ed = S.edit;
   if (!ed) return;
+  if (!S.sample) { readText(ed, true); return; }
   if (!ed.origText) { readText(ed); return; }
   ed.ocr = { tier: 'manual', text: ed.origText, reread: true };
-  if (S.sample) recognize('default'); else readText(ed);
+  recognize('default');
 };
 $('btnMore').onclick = () => { if (S.edit) { S.edit.tier = 2; scheduleMatch(0); } };
 {
