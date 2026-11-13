@@ -2,7 +2,7 @@
 // online use → download offline packs → airplane mode (reload, read, match) → back to online (fonts deleted) → still opens offline.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const path = require('path');
+const path = require('path'), fs = require('fs');
 const PORT = 8765, BASE = 'http://localhost:' + PORT + '/';
 const box = async (p, x0, y0, x1, y1) => p.evaluate(async ([x0, y0, x1, y1]) => {
   const R = window.__retext, S = R.S;
@@ -14,7 +14,7 @@ const box = async (p, x0, y0, x1, y1) => p.evaluate(async ([x0, y0, x1, y1]) => 
 (async () => {
   const srv = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', path.join(__dirname, '..', 'docs')], { stdio: 'ignore' });
   await new Promise(r => setTimeout(r, 800));
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, headless: true, args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   let p = await ctx.newPage();
   const logs = [];
@@ -33,7 +33,7 @@ const box = async (p, x0, y0, x1, y1) => p.evaluate(async ([x0, y0, x1, y1]) => 
     console.log('2 sheet:', (await p.textContent('#offGo')).trim(), '|', (await p.textContent('#packList')).replace(/\s+/g, ' ').slice(0, 160));
     const t0 = Date.now();
     await p.click('#offGo');
-    await p.waitForFunction(() => { const s = JSON.parse(localStorage.getItem('retext.offline') || '{}'); return s.packs && s.packs.latin === 'done' && s.packs.sc === 'done'; }, null, { timeout: 600000, polling: 1000 });
+    await p.waitForFunction(() => { const s = JSON.parse(localStorage.getItem('retext.offline') || '{}'); return s.packs && s.packs.latin === 'done' && s.packs.sc === 'done' && s.packs.pdf === 'done'; }, null, { timeout: 600000, polling: 1000 });
     const nCache = await p.evaluate(async () => (await (await caches.open('retext-fonts')).keys()).length);
     console.log('  downloaded in', Math.round((Date.now() - t0) / 1000) + 's, files cached', nCache, '|', (await p.textContent('#offStore')), '|', await p.textContent('#offlineState'));
     await p.click('#offClose');
@@ -46,6 +46,24 @@ const box = async (p, x0, y0, x1, y1) => p.evaluate(async ([x0, y0, x1, y1]) => 
     console.log('  price', JSON.stringify(await box(p, 100, 482, 372, 552)));
     console.log('  caps ', JSON.stringify(await box(p, 74, 108, 640, 162)));
     console.log('  title', JSON.stringify(await box(p, 72, 200, 860, 330)));
+    // 3b. a PDF whose fonts are not inside the file needs the helper pack (standard fonts, character maps): it must work with no network
+    {
+      const f = path.join(__dirname, 'out', 'pdf', 'reportlab.pdf');
+      if (fs.existsSync(f)) {
+        const r = await p.evaluate(async b64 => {
+          const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+          await window.__retext.loadBlob(new File([u], 'reportlab.pdf', { type: 'application/pdf' }), 'reportlab.pdf');
+          const S = window.__retext.S; if (!S.pdf) return { opened: false };
+          const k = S.pdf.pages.get(1).vp.scale;
+          window.__retext.startEdit({ x: 70 * k, y: 150 * k, w: 135 * k, h: 18 * k }, false);
+          const ed = S.edit, t0 = Date.now(); await new Promise(res => { const iv = setInterval(() => { if ((ed.origText && ed.st.matched && !/正在/.test(document.getElementById('matchStatus').textContent)) || Date.now() - t0 > 60000) { clearInterval(iv); res(); } }, 100); });
+          const all = S.pdf.pages.get(1).map.shows.map(s => s.g.map(g => g.u).join('')).join(' ');
+          window.__retext.commit('text', true);
+          return { opened: true, pages: S.pdf.n, read: ed.origText, font: ed.st.fam.label || ed.st.fam.n, chinese: /人民币/.test(all) };
+        }, fs.readFileSync(f).toString('base64'));
+        console.log('  pdf  ', JSON.stringify(r));
+      } else console.log('  pdf   (no sample: run python3 test/pdf/make_samples.py)');
+    }
     // 4. back to online: deletes the packs
     await p.click('#btnCancel').catch(() => {});
     await ctx.setOffline(false);

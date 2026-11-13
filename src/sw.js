@@ -19,8 +19,17 @@ self.addEventListener('fetch', e => {
   const scope = new URL(self.registration.scope);
   if (!url.pathname.startsWith(scope.pathname)) return;
   const rel = url.pathname.slice(scope.pathname.length);
-  if (rel.startsWith('fonts/') && rel !== 'fonts/packs.json') {
-    e.respondWith(caches.open(FONTS).then(c => c.match(req.url)).then(hit => hit || caches.match(req.url)).then(hit => hit || fetch(req)));
+  /* fonts and the PDF helper files (character maps, standard fonts, image decoders): from the downloaded packs when present,
+     otherwise from the network; a helper file fetched once is kept for later use without a network */
+  const helper = rel.startsWith('pdf/') && !SHELL_FILES.includes(rel);
+  if ((rel.startsWith('fonts/') && rel !== 'fonts/packs.json') || helper) {
+    e.respondWith((async () => {
+      const hit = (await (await caches.open(FONTS)).match(req.url)) || (await caches.match(req.url));
+      if (hit) return hit;
+      const r = await fetch(req);
+      if (helper && r.ok) (await caches.open(SHELL)).put(req.url, r.clone());
+      return r;
+    })());
     return;
   }
   /* the app: from the device at once, refreshed in the background */

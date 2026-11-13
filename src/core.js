@@ -492,12 +492,15 @@ function estimateSlant(alpha, w, h, band) {
    ===================================================================== */
 const GENERIC = new Set(['system-ui', 'ui-rounded', 'ui-serif', 'ui-monospace', 'sans-serif', 'serif', 'monospace', 'cursive']);
 const COMPLEX_RE = /[֐-ࣿऀ-෿฀-໿ក-៿]/;
+/* A PDF's own font can only be drawn through the codes pdf.js gave its glyphs; text is translated just before it is measured or drawn. */
+const encT = (fam, t) => (fam && fam.pdf ? pdfEnc(fam.pdf, t) : t);
 function famCss(fam) {
+  if (fam.pdf) return fam.pdf.css;
   if (fam.stack) return fam.stack.map(f => (GENERIC.has(f.n) ? f.n : '"' + f.n + '"')).join(', ') + ', sans-serif';
   if (GENERIC.has(fam.n)) return fam.n;
   return '"' + fam.n + '", ' + (fam.c === 'r' ? 'serif' : fam.c === 'm' ? 'monospace' : 'sans-serif');
 }
-function fontCss(c, px) { return (c.italic ? 'italic ' : '') + c.weight + ' ' + px.toFixed(3) + 'px ' + famCss(c.fam); }
+function fontCss(c, px) { return c.fam.pdf ? c.fam.pdf.fs + ' ' + c.fam.pdf.fw + ' ' + px.toFixed(3) + 'px ' + c.fam.pdf.css : (c.italic ? 'italic ' : '') + c.weight + ' ' + px.toFixed(3) + 'px ' + famCss(c.fam); }
 
 const _mc = { can: null, ctx: null };
 let INK = '#ffffff'; // colour used when rasterising glyph masks (set to the detected text colour)
@@ -535,10 +538,10 @@ function inkMetrics(c, text, nRuns) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.font = fontCss(c, REF);
-  const m = ctx.measureText(text);
+  const m = ctx.measureText(encT(c.fam, text));
   const mk = (t, mm) => ({ text: t, L: mm.actualBoundingBoxLeft / REF, R: mm.actualBoundingBoxRight / REF, W: mm.width / REF, n: Array.from(t).length });
   let runs = null;
-  if (nRuns > 1) { const ws = text.split(/\s+/).filter(Boolean); if (ws.length === nRuns) runs = ws.map(t => mk(t, ctx.measureText(t))); }
+  if (nRuns > 1) { const ws = text.split(/\s+/).filter(Boolean); if (ws.length === nRuns) runs = ws.map(t => mk(t, ctx.measureText(encT(c.fam, t)))); }
   if (!runs) runs = [mk(text, m)];
   let inkW = 0, gaps = 0;
   for (const r of runs) { inkW += r.L + r.R; gaps += r.n - 1; }
@@ -591,8 +594,8 @@ function renderAlpha(c, text, g, tw, th, out) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.font = fontCss(c, g.px);
   ctx.fillStyle = INK;
-  if (g.words) for (let j = 0; j < g.words.length; j++) drawRun(ctx, g.words[j], g.xs[j], g.oy, g.tr, false);
-  else drawRun(ctx, text, g.ox, g.oy, g.tr, false);
+  if (g.words) for (let j = 0; j < g.words.length; j++) drawRun(ctx, encT(c.fam, g.words[j]), g.xs[j], g.oy, g.tr, false);
+  else drawRun(ctx, encT(c.fam, text), g.ox, g.oy, g.tr, false);
   const d = ctx.getImageData(0, 0, tw, th).data;
   let sum = 0;
   for (let i = 0, p = 3, n = tw * th; i < n; i++, p += 4) { const v = d[p]; out[i] = v; sum += v; }
@@ -848,10 +851,11 @@ function glyphScores(c, text, T, r) {
   const cells = [];
   const addRun = (t, x0) => {
     let prefix = '';
+    const enc = Array.from(encT(c.fam, t));
     Array.from(t).forEach((ch, i) => {
-      const w = ctx.measureText(ch).width;
-      if (ch.trim()) { const x = x0 + ctx.measureText(prefix + ch).width - w + i * tr; cells.push({ ch, a: x, b: x + w }); }
-      prefix += ch;
+      const e = enc[i] || ch, w = ctx.measureText(e).width;
+      if (ch.trim()) { const x = x0 + ctx.measureText(prefix + e).width - w + i * tr; cells.push({ ch, a: x, b: x + w }); }
+      prefix += e;
     });
   };
   if (g.words) g.words.forEach((w, j) => addRun(w, g.xs[j])); else addRun(text, g.ox);
@@ -939,8 +943,9 @@ function textCoverage(st, lines, px, trPx, w, h, lineWidth) {
   if (lineWidth) ctx.lineWidth = lineWidth;
   for (const ln of lines) {
     if (!ln.text) continue;
-    if (lineWidth) drawRun(ctx, ln.text, ln.ox, ln.oy, trPx, true);
-    drawRun(ctx, ln.text, ln.ox, ln.oy, trPx, false);
+    const t = encT(st.fam, ln.text);
+    if (lineWidth) drawRun(ctx, t, ln.ox, ln.oy, trPx, true);
+    drawRun(ctx, t, ln.ox, ln.oy, trPx, false);
   }
   const d = ctx.getImageData(0, 0, w, h).data;
   const out = new Float32Array(w * h);

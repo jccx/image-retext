@@ -28,7 +28,7 @@ function cssFor(name, tuples) {
 }
 
 async function open(opts = {}) {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--font-render-hinting=none'] });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, headless: true, args: ['--no-sandbox', '--font-render-hinting=none'] });
   const ctx = await browser.newContext({ viewport: opts.viewport || { width: 1280, height: 860 }, deviceScaleFactor: opts.dsf || 1, hasTouch: !!opts.touch, isMobile: !!opts.mobile });
   const stats = { css: 0, cssFail: 0, font: 0 };
   await ctx.route('https://fonts.googleapis.com/**', route => {

@@ -205,7 +205,7 @@ input[type="range"] { accent-color: var(--accent); min-width: 0; }
   background: var(--ink); color: var(--card); padding: 9px 14px; border-radius: 99px; font-size: 13.5px; text-align: center;
 }
 .sheet { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .6); display: grid; place-items: center; padding: 16px; }
-.sheet-card { background: var(--card); border-radius: 12px; padding: 16px; width: min(560px, 100%); max-height: 100%; overflow: auto; display: grid; gap: 10px; }
+.sheet-card { background: var(--card); border-radius: 12px; padding: 16px; width: min(560px, 100%); max-height: 100%; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .sheet-card h2 { margin: 0; font-size: 17px; text-wrap: balance; }
 .sheet-card p { margin: 0; color: var(--muted); font-size: 13.5px; }
 .sheet-img { background: var(--bench); border-radius: var(--r); display: grid; place-items: center; padding: 8px; }
@@ -254,3 +254,11 @@ input[type="range"] { accent-color: var(--accent); min-width: 0; }
 .sheet-card.doc p { line-height: 1.6; }
 .sheet-card.doc a { color: var(--accent); word-break: break-all; }
 .save-note { color: var(--warn) !important; font-size: 12.5px !important; }
+
+/* ---------- PDF pages ---------- */
+.pager { right: auto; left: 12px; }
+.pager button:disabled { opacity: .35; cursor: default; }
+.pager #pgNum { min-width: 64px; font-variant-numeric: tabular-nums; }
+.opt-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.opt-row[hidden] { display: none; }
+.opt-row input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--accent); }

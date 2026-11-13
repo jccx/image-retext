@@ -6,7 +6,8 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "fonts": "node build_site.js",
-    "build": "node build.js"
+    "build": "node build.js",
+    "test:pdf": "node test/pdf/t_strip.mjs && node test/t_pdf.js && node test/t_pdf_special.js"
   },
   "devDependencies": {
     "@fontsource/abel": "^5.3.0",
@@ -276,7 +277,9 @@
     "@fontsource/zhi-mang-xing": "^5.3.0",
     "@fontsource/zilla-slab": "^5.3.0",
     "google-font-metadata": "^6.0.8",
-    "playwright-core": "^1.65.0",
-    "playwright": "^1.50.0"
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.5.438",
+    "playwright": "^1.50.0",
+    "playwright-core": "^1.65.0"
   }
 }

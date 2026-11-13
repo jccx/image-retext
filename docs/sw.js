@@ -2,9 +2,9 @@
    - The app itself (page, icons, manifest) is kept on the device, so it opens without a network.
    - Fonts: answered from the downloaded packs (Cache Storage "retext-fonts") when present, otherwise from the network.
    - A new version is fetched in the background and used from the next launch. */
-const VERSION = 'b79625a1ef';
+const VERSION = '522784b7af';
 const SHELL = 'retext-shell-' + VERSION, FONTS = 'retext-fonts';
-const SHELL_FILES = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","fonts/packs.json","fonts/ibm-plex-mono/ibm-plex-mono.css","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2"];
+const SHELL_FILES = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","fonts/packs.json","fonts/ibm-plex-mono/ibm-plex-mono.css","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2","pdf/pdf.min.js","pdf/pdf.worker.min.js","pdf/pdf-lib.min.js"];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
@@ -19,8 +19,17 @@ self.addEventListener('fetch', e => {
   const scope = new URL(self.registration.scope);
   if (!url.pathname.startsWith(scope.pathname)) return;
   const rel = url.pathname.slice(scope.pathname.length);
-  if (rel.startsWith('fonts/') && rel !== 'fonts/packs.json') {
-    e.respondWith(caches.open(FONTS).then(c => c.match(req.url)).then(hit => hit || caches.match(req.url)).then(hit => hit || fetch(req)));
+  /* fonts and the PDF helper files (character maps, standard fonts, image decoders): from the downloaded packs when present,
+     otherwise from the network; a helper file fetched once is kept for later use without a network */
+  const helper = rel.startsWith('pdf/') && !SHELL_FILES.includes(rel);
+  if ((rel.startsWith('fonts/') && rel !== 'fonts/packs.json') || helper) {
+    e.respondWith((async () => {
+      const hit = (await (await caches.open(FONTS)).match(req.url)) || (await caches.match(req.url));
+      if (hit) return hit;
+      const r = await fetch(req);
+      if (helper && r.ok) (await caches.open(SHELL)).put(req.url, r.clone());
+      return r;
+    })());
     return;
   }
   /* the app: from the device at once, refreshed in the background */

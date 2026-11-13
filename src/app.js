@@ -185,7 +185,7 @@ const S = {
   img: null, ictx: null, iw: 0, ih: 0, name: 'image', type: 'image/png', demo: false,
   view: { s: 1, tx: 0, ty: 0 }, vw: 0, vh: 0, dpr: 1,
   edit: null, undo: [], drag: null, pointers: new Map(), pinch: null, space: false,
-  sample: null, downloads: null, lastFam: null, comparing: false
+  sample: null, downloads: null, lastFam: null, comparing: false, pdf: null
 };
 const stage = $('stage'), vcan = $('view'), vctx = vcan.getContext('2d'), selEl = $('sel');
 
@@ -246,6 +246,7 @@ function stagePt(e) { const r = stage.getBoundingClientRect(); return { x: e.cli
 
 /* ---------- image loading ---------- */
 async function loadBlob(blob, name) {
+  if (isPdf(blob, name)) { await openPdf(blob, name); return; }
   let bmp;
   try { bmp = await createImageBitmap(blob); }
   catch (e) {
@@ -258,6 +259,7 @@ async function loadBlob(blob, name) {
   x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
   x.imageSmoothingQuality = 'high';
   x.drawImage(bmp, 0, 0, c.width, c.height);
+  pdfClose();
   setImage(c, x, name || 'image', /jpe?g/i.test(blob.type) ? 'image/jpeg' : 'image/png', false);
   warmReader();
   if (k < 1) toast('图片很大，已缩小到最长边 4096 像素');
@@ -558,8 +560,9 @@ function commit(mode, quiet) {
   const out = compose(ed, mode);
   const before = S.ictx.getImageData(out.x, out.y, out.w, out.h);
   S.ictx.putImageData(out.data, out.x, out.y);
-  S.undo.push({ x: out.x, y: out.y, data: before });
-  if (S.undo.length > 60) S.undo.shift();
+  S.undo.push({ x: out.x, y: out.y, data: before, after: out.data });
+  if (S.undo.length > 60 && !S.pdf) S.undo.shift();      // every edit of a PDF page is needed to write it back
+  PDFS.out = null;
   $('btnUndo').disabled = false;
   S.lastFam = ed.st.fam;
   S.edit = null;
@@ -572,6 +575,7 @@ function undo() {
   const u = S.undo.pop();
   if (!u) return;
   S.ictx.putImageData(u.data, u.x, u.y);
+  PDFS.out = null;
   $('btnUndo').disabled = !S.undo.length;
   requestDraw();
 }
@@ -597,6 +601,12 @@ async function runMatch() {
   const H = band.y1 - band.y0;
   const slant = estimateSlant(an.alpha, an.w, an.h, band);
   const fams = candidateFamilies(text, ed.tier);
+  /* a PDF names its fonts: the family of that name (or its open look-alike) is tried even when it is not in the short list */
+  const hint = ed.pdfHint && ed.ocr && ed.ocr.tier === 'pdf' ? ed.pdfHint : null;
+  const hinted = c => !!hint && (hint.fams.includes(c.fam) || (c.fam.stack || []).some(f => hint.fams.includes(f)));
+  if (hint) for (const f of hint.fams) if (!fams.includes(f)) fams.push(f);
+  /* and the PDF's own font, when the whole selection is set in one */
+  if (ed.pdfFam && ed.ocr && ed.ocr.tier === 'pdf' && !fams.includes(ed.pdfFam)) fams.unshift(ed.pdfFam);
   setInk(an.color);
   setStatus('正在载入字体…');
   await ensureCss(fams);
@@ -693,7 +703,7 @@ async function runMatch() {
     if (scriptOf(text) !== 'latin' && /[A-Za-z0-9]/.test(text)) {
       const c0 = res.find(r => !r.c.fam.comp);
       const lat = candidateFamilies('a', ed.tier).filter(f => !f.cjk);
-      const cjk = fams.filter(f => !f.custom);
+      const cjk = fams.filter(f => !f.custom && !f.pdf);
       if (c0) {
         await ensureCss(lat);
         if (stale()) return null;
@@ -740,8 +750,10 @@ async function runMatch() {
       perFam.set(r.c.fam, k + 1); top.push(r.c);
       if (top.length >= 10) break;
     }
+    if (hint && !top.some(hinted)) { const r = res.find(q => hinted(q.c)); if (r) top.push(r.c); }
+    if (ed.pdfFam && !top.some(c => c.fam === ed.pdfFam)) { const r = res.find(q => q.c.fam === ed.pdfFam); if (r) top.push(r.c); }
     const refined = [];
-    const refine = c => { const r = refineCand(c, text, T2, T2c); if (r) { if (c.fam.comp) r.score -= 0.012; refined.push(r); } };
+    const refine = c => { const r = refineCand(c, text, T2, T2c); if (r) { if (c.fam.comp) r.score -= 0.012; if (hinted(c)) r.score += 0.012; if (c.fam.pdf) r.score += 0.03; refined.push(r); } };   // the file's own font wins a near tie with its look-alikes
     for (let i = 0; i < top.length; i++) { refine(top[i]); if (i % 3 === 2) { await tick(); if (stale()) return null; } }
     refined.sort((a, b) => b.score - a.score);
     /* the neighbouring weights of the winner, in case the first pass ranked them poorly */
@@ -765,6 +777,15 @@ async function runMatch() {
         const S2c = makeTarget(an.alpha, an.w, an.h, band, ed.bands, Math.min(1, 26 / H), null);
         const r2 = refineCand(b0, text, S2, S2c);
         if (r2 && r2.iou >= b0.iou - 0.02) { r2.score = b0.score; refined[0] = r2; T2 = S2; T2c = S2c; }
+      }
+    }
+    /* the PDF's own font needs no fitting: the file says where its glyphs sit */
+    if (ed.pdfFam && ed.ocr && ed.ocr.tier === 'pdf') {
+      const ex = pdfExact(ed, text, T2);
+      if (ex) {
+        for (let k = refined.length - 1; k >= 0; k--) if (refined[k].fam === ed.pdfFam) refined.splice(k, 1);
+        refined.push(ex);
+        refined.sort((a, b) => b.score - a.score);
       }
     }
     return { res, refined, T1, T2, T2c };
@@ -798,6 +819,7 @@ async function runMatch() {
   if (!refined.length) { setStatus('没能比对出字体，可以在“微调”里手动选。', true); renderCands(); return; }
   adopt(refined[0], true);
   const best = refined[0];
+  pdfFontFor(ed);
   if (ed.ocr && !ed.ocr.reread && ed.origText === ed.ocr.text) {
     const gs = glyphScores(best, text, ed.T2, best).map(g => g.iou).sort((p, q) => p - q);
     const med = gs.length ? gs[gs.length >> 1] : 1;
@@ -809,7 +831,7 @@ async function runMatch() {
   }
   if (ed.ocr && ed.ocr.doubt && !S.sample) { ed.ocr.doubt = false; setStatus(ed.ocr.reread && ed.ocr.tier === 'local' ? '这段字读得没把握，已填上最接近的结果，请核对改正。' : '有的字可能读错了，请核对上面的原文字。', true); }
   else if (best.iou < 0.55) setStatus('没找到很接近的字体。可以在“微调”里手动选，或上传字体文件。', true);
-  else setStatus(ed.tier < 2 && scriptOf(text) === 'latin' && best.iou < 0.8 ? '不够像的话，“微调”里可以在更多字体里再找一遍。' : '');
+  else setStatus(ed.tier < 2 && scriptOf(text) === 'latin' && best.iou < 0.8 ? '不够像的话，“微调”里可以在更多字体里再找一遍。' : best.fam.pdf && ed.st.fam === best.fam ? '用的是 PDF 自带的字体，和原文一致。' : ed.pdfAlt ? $('matchStatus').textContent : hint ? 'PDF 里这段字写的字体名是 ' + hint.label + '。' : '', !!ed.pdfAlt);
   renderCands();
 }
 
@@ -856,8 +878,8 @@ function refresh() {
   sc.className = 'num' + (st.score == null ? '' : st.score >= 0.8 ? ' ok' : st.score < 0.6 ? ' low' : '');
   const sp = $('specSample'), tx = $('specText');
   sp.style.background = rgbHex(ed.an.bgColor);
-  tx.textContent = (ed.newText || ed.origText || 'Aa 文字 123').split('\n')[0];
-  tx.style.cssText = 'font-family:' + famCss(st.fam) + ';font-weight:' + st.weight + ';font-style:' + (st.italic ? 'italic' : 'normal') +
+  tx.textContent = encT(st.fam, (ed.newText || ed.origText || 'Aa 文字 123').split('\n')[0]);
+  tx.style.cssText = 'font-family:' + famCss(st.fam) + ';font-weight:' + (st.fam.pdf ? st.fam.pdf.fw : st.weight) + ';font-style:' + (st.fam.pdf ? st.fam.pdf.fs : st.italic ? 'italic' : 'normal') +
     ';color:' + rgbHex(st.color) + ';letter-spacing:' + (st.trEm + st.trAdj).toFixed(4) + 'em';
   // controls
   const sf = $('selFamily');
@@ -894,8 +916,8 @@ function renderCands() {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.dataset.fam = r.fam.n;
     b.setAttribute('aria-pressed', r.fam === ed.st.fam ? 'true' : 'false');
-    const s = document.createElement('span'); s.className = 's'; s.textContent = sample;
-    s.style.cssText = 'font-family:' + famCss(r.fam) + ';font-weight:' + r.weight + ';font-style:' + (r.italic ? 'italic' : 'normal');
+    const s = document.createElement('span'); s.className = 's'; s.textContent = encT(r.fam, sample);
+    s.style.cssText = 'font-family:' + famCss(r.fam) + ';font-weight:' + (r.fam.pdf ? r.fam.pdf.fw : r.weight) + ';font-style:' + (r.fam.pdf ? r.fam.pdf.fs : r.italic ? 'italic' : 'normal');
     const m = document.createElement('span'); m.className = 'm';
     const n = document.createElement('span'); n.textContent = famLabel(r.fam) + ' ' + r.weight;
     const p = document.createElement('span'); p.className = 'num'; p.textContent = Math.round(r.iou * 100) + '%';
@@ -907,7 +929,7 @@ function renderCands() {
 function buildFamilySelect() {
   const sf = $('selFamily');
   sf.textContent = '';
-  const groups = [['本机字体', f => f.sys && !f.custom], ['已上传', f => f.custom], ['中文', f => !f.sys && (f.sc === 'sc' || f.sc === 'tc')],
+  const groups = [['这份 PDF 自带的字体', f => !!f.pdf], ['本机字体', f => f.sys && !f.custom && !f.pdf], ['已上传', f => f.custom], ['中文', f => !f.sys && (f.sc === 'sc' || f.sc === 'tc')],
     ['无衬线', f => !f.sys && !f.sc && f.c === 's'], ['衬线', f => !f.sys && !f.sc && f.c === 'r'], ['等宽', f => !f.sys && !f.sc && f.c === 'm'],
     ['手写', f => !f.sys && !f.sc && f.c === 'h'], ['展示', f => !f.sys && !f.sc && f.c === 'd'], ['日文', f => f.sc === 'jp'], ['韩文', f => f.sc === 'kr']];
   const all = [...FAM.values()].filter(f => !f.comp);
@@ -943,6 +965,7 @@ $('inNew').addEventListener('input', e => {
   const ed = S.edit;
   if (!ed) return;
   ed.newText = e.target.value;
+  pdfFontFor(ed);
   if (!ed.st.matched && ed.an.found) {
     computeFit(ed);
     if (!ed.origLines.length && ed.newText.trim() && !/正在/.test($('matchStatus').textContent)) setStatus('没有原文字：大小和位置按旧字的外框估算。填上原文字可比对出字体。');
@@ -981,6 +1004,16 @@ function ocrCrop(ed) {
 /* force: the user pressed 识别/重读 — retry a reader that failed to start, overwrite what is in the field,
    and when the reader is unsure, still put its best guess there for the user to correct */
 async function readText(ed, force) {
+  /* a PDF page knows its own text: no reading needed, and no guessing */
+  const pr = S.pdf ? pdfReadEdit(ed) : null;
+  if (pr && (force || !ed.origText)) {
+    const mirror = !ed.newText || ed.newText === ed.origText;
+    ed.ocr = { tier: 'pdf', text: pr.text, reread: true };
+    ed.varDone = true; ed.pdfHint = pr.hint; ed.pdfFam = pr.fam; ed.pdfLines = pr.lines; ed.pdfAlt = false;
+    if (mirror) { ed.newText = ''; $('inNew').value = ''; }
+    setOrig(pr.text, true);
+    return;
+  }
   await Promise.race([S.sampleReady, new Promise(r => setTimeout(r, 1500))]);
   if (S.edit !== ed) return;
   if (S.sample) { recognize('quick'); return; }
@@ -1141,7 +1174,7 @@ $('fileInput').onchange = async e => {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!f) return;
-  try { await loadBlob(f, f.name); } catch (err) { toast('这张图片打不开，换一张 PNG 或 JPG 试试'); }
+  try { await loadBlob(f, f.name); } catch (err) { toast(isPdf(f, f.name) ? '这个 PDF 打不开' : '这张图片打不开，换一张 PNG 或 JPG 试试'); }
 };
 $('btnUndo').onclick = undo;
 $('btnCancel').onclick = dropEdit;
@@ -1215,6 +1248,9 @@ $('fontInput').onchange = async e => {
 /* ---------- saving ---------- */
 async function save() {
   if (!S.img) return;
+  if (S.pdf) { pdfSave(); return; }
+  $('sheetTitle').textContent = '保存图片'; $('saveNote').textContent = '修改后的图片请合法使用，后果由使用者自负。'; $('sheetHow').textContent = '长按下面的图片选“存储到照片”；电脑上右键选“图片另存为”。';
+  $('pdfOpts').hidden = true; $('sheetImg').parentElement.hidden = false; $('sheetShare').textContent = '存到相册 / 分享'; $('sheetLink').textContent = '直接下载';
   if (S.edit && S.edit.live) commit('text', true);
   const jpg = S.type === 'image/jpeg';
   const blob = await new Promise(res => S.img.toBlob(res, S.type, jpg ? 0.95 : undefined));
@@ -1258,13 +1294,13 @@ stage.addEventListener('dragleave', () => { $('dropHint').hidden = true; });
 stage.addEventListener('drop', e => {
   e.preventDefault(); $('dropHint').hidden = true;
   const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (f && f.type.startsWith('image/')) loadBlob(f, f.name).catch(() => toast('这张图片打不开'));
+  if (f && (f.type.startsWith('image/') || (BUILD === 'pages' && isPdf(f, f.name)))) loadBlob(f, f.name).catch(() => toast('这个文件打不开'));
 });
 
 /* ---------- offline fonts (installable build only) ----------
    在线: fonts come from this site as needed. 离线: whole packs are kept on the device (Cache Storage) and the
    service worker answers from there, so matching works with no network. Switching back to 在线 deletes them. */
-const OFF = { cache: 'retext-fonts', busy: null, sel: { latin: true, sc: true, cjk: false } };
+const OFF = { cache: 'retext-fonts', busy: null, sel: { latin: true, sc: true, cjk: false, pdf: true } };
 const offKey = 'retext.offline';
 function offState() { try { return JSON.parse(localStorage.getItem(offKey)) || { mode: 'online', packs: {} }; } catch (e) { return { mode: 'online', packs: {} }; } }
 function offSave(st) { try { localStorage.setItem(offKey, JSON.stringify(st)); } catch (e) { /* private mode: state lives for this visit only */ } }
@@ -1301,7 +1337,7 @@ function offRender() {
     const right = document.createElement('span');
     if (s === 'done') { const d = document.createElement('button'); d.type = 'button'; d.className = 'del'; d.textContent = '删除'; d.disabled = !!OFF.busy; d.onclick = e => { e.preventDefault(); offDelete([k]); }; right.appendChild(d); }
     const sm = document.createElement('small');
-    sm.textContent = p.fams + ' 款，约 ' + mb(p.bytes) + (s === 'done' ? ' · 已下载' : s === 'part' && !busy ? ' · 没下载完，可继续' : busy ? ' · 下载中 ' + Math.round(OFF.busy.frac * 100) + '%' : '');
+    sm.textContent = (p.fams ? p.fams + ' 款，约 ' : '打开 PDF 时用的字符表、标准字体和图像解码，约 ') + mb(p.bytes) + (s === 'done' ? ' · 已下载' : s === 'part' && !busy ? ' · 没下载完，可继续' : busy ? ' · 下载中 ' + Math.round(OFF.busy.frac * 100) + '%' : '');
     row.append(cb, b, right, sm);
     if (busy) { const bar = document.createElement('div'); bar.className = 'bar'; const i = document.createElement('i'); i.style.width = (OFF.busy.frac * 100).toFixed(1) + '%'; bar.appendChild(i); row.appendChild(bar); }
     list.appendChild(row);
@@ -1389,6 +1425,7 @@ function offInit() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 offInit();
+pdfInit();
 
 /* ---------- demo picture (clearly labelled as an example) ---------- */
 async function makeDemo() {
