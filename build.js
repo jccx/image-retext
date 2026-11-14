@@ -4,13 +4,23 @@
 // Fonts for docs/ are prepared by build_site.js (run it once, or after font changes).
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const rd = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
+/* The app's script: these files, one after another, in one inline script (see ARCHITECTURE.md). */
+const GENERATED = ['fontdb.gen.js', 'selffonts.gen.js', 'hanzi.gen.js', 'latin.gen.js'];      // data, written by gen_fontdb.js, build_site.js and train/
+const MODULES = [
+  'image/pixels.js', 'image/analyze.js', 'image/typeset.js', 'image/fontfit.js', 'image/render.js',
+  'hanzi.gen.js', 'latin.gen.js',
+  'reader/models.js', 'reader/classify.js', 'reader/line.js', 'reader/variants.js', 'reader/read.js',
+  'pdf/core.js', 'pdf/libs.js', 'pdf/pages.js', 'app/find.js', 'pdf/fonts.js', 'pdf/edit.js', 'pdf/write.js', 'pdf/build.js', 'pdf/save.js',
+  'app/util.js', 'app/families.js', 'app/webfonts.js', 'app/state.js', 'app/view.js', 'app/load.js', 'app/edit.js', 'app/layout.js', 'app/apply.js', 'app/match.js',
+  'app/panel.js', 'app/inputs.js', 'app/read.js', 'app/pointer.js', 'app/controls.js', 'app/save.js', 'app/shortcuts.js', 'app/offline.js', 'app/demo.js', 'app/main.js'
+];
 const FINE_PAGES = '双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片只在你的设备上处理，不会上传。原文字由页面自带的识别读出：常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。也可以打开 PDF：一页一页地改，原文字直接取自 PDF，保存时新文字作为真正的文字写回 PDF，其它内容不变；同一个词要改多处时，用上面的“查找”逐处改，不会漏；图片和扫描页里的字，先点“识别图片里的文字”再查找。';
 function build(target) {
   const pages = target === 'pages';
   let html = rd('index.html');
   const js = "'use strict';\nconst BUILD = '" + target + "';\n" + rd('fontdb.gen.js') + '\n' +
     (pages ? rd('selffonts.gen.js') + '\nFONT_PACKS.pdf = ' + JSON.stringify(Object.assign(pdfPack(), { files: undefined })) + ';' : 'const SELF_FONTS = {}, FONT_PACKS = {};') + '\n' +
-    rd('core.js') + '\n' + rd('hanzi.gen.js') + '\n' + rd('latin.gen.js') + '\n' + rd('ocr.js') + '\n' + rd('pdfcore.js') + '\n' + rd('pdf.js') + '\n' + rd('app.js');
+    MODULES.map(rd).join('\n');
   if (/<\/script/i.test(js)) throw new Error('script close tag inside JS');
   html = html.replace('/*__CSS__*/', () => rd('style.css')).replace('/*__JS__*/', () => js);
   if (pages) {
@@ -82,6 +92,9 @@ function pdfPack() {
   }
   return { name: 'PDF 组件', bytes, n: files.length, fams: 0, files };
 }
-const which = process.argv[2] || 'all';
-if (which === 'all' || which === 'artifact') build('artifact');
-if (which === 'all' || which === 'pages') build('pages');
+if (require.main === module) {
+  const which = process.argv[2] || 'all';
+  if (which === 'all' || which === 'artifact') build('artifact');
+  if (which === 'all' || which === 'pages') build('pages');
+}
+module.exports = { MODULES, GENERATED };

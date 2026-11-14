@@ -2320,6 +2320,7 @@ function ocrCompose(b, gl) {
   }
   return { text: t, maybe, slots };
 }
+
 /* full-width and half-width forms look alike to the reader; the font fit tells them apart */
 const WIDTH_PAIRS = [['￥', '¥'], ['：', ':'], ['，', ','], ['；', ';'], ['！', '!'], ['？', '?'], ['（', '('], ['）', ')'], ['％', '%']];
 function widthVariants(t) {
@@ -2344,6 +2345,7 @@ function textVariants(t, maybe) {
   const seen = new Set([t]);
   return out.filter(v => !seen.has(v.t) && seen.add(v.t));
 }
+
 /* every line of an analysed selection → { text, conf, maybe, slots } */
 function ocrReadLines(an, bands) {
   const lines = [], maybe = [], slots = [];

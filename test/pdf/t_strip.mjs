@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const NM = path.join(ROOT, 'node_modules');
 const pdfjs = await import(pathToFileURL(path.join(NM, 'pdfjs-dist/legacy/build/pdf.mjs')).href);
 const PDFLib = require(path.join(NM, 'pdf-lib/dist/pdf-lib.min.js'));
-const core = new Function(fs.readFileSync(path.join(ROOT, 'src/pdfcore.js'), 'utf8') + '\nreturn { pdfGlyphMap, pdfTextIn, pdfGlyphsIn, pdfStrip, pdfScanShows };')();
+const core = new Function(fs.readFileSync(path.join(ROOT, 'src/pdf/core.js'), 'utf8') + '\nreturn { pdfGlyphMap, pdfTextIn, pdfGlyphsIn, pdfStrip, pdfScanShows };')();
 const CASES = [
   ['reportlab.pdf', 1, ['INVOICE #2026-1184', 'November 12, 2026', '$1,284.00', 'AB-0042-XZ', 'Spaced letters', 'word gaps', 'Condensed by scale', '30', 'café, naïve', '人民币 1,284.00 元', 'December 1']],
   ['reportlab.pdf', 2, ['1.5%']],
