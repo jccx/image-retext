@@ -42,8 +42,8 @@ const CASES = [
   const app = h.page;
   await app.evaluate(async b64 => {
     const blob = await (await fetch('data:image/png;base64,' + b64)).blob();
-    await window.__retext.loadBlob(blob, 'shot');
-    const S = window.__retext.S; const k = document.createElement('canvas'); k.width = S.iw; k.height = S.ih; k.getContext('2d').drawImage(S.img, 0, 0); window.__orig = k;
+    await window.__app.loadBlob(blob, 'shot');
+    const S = window.__app.S; const k = document.createElement('canvas'); k.width = S.iw; k.height = S.ih; k.getContext('2d').drawImage(S.img, 0, 0); window.__orig = k;
     // ink measurement straight from pixels: lines (rows) and blobs (columns separated by >= g empty columns)
     window.__measure = (canvas, rect, g) => {
       const d = canvas.getContext('2d').getImageData(rect.x, rect.y, rect.w, rect.h), an = analyzeRegion(d, { grow: 2 });
@@ -69,7 +69,7 @@ const CASES = [
     let out;
     try {
       out = await app.evaluate(async ({ c, box, row, orig, to, btn }) => {
-        const R = window.__retext, S = R.S;
+        const R = window.__app, S = R.S;
         const g = c.check === 'same' || c.check === 'gaps' ? 7 : 400;
         const mrect = btn ? { x: Math.round(btn.x + 4), y: row.y + 30, w: Math.round(btn.w - 8), h: row.h - 60 } : row;
         const m0 = window.__measure(window.__orig, mrect, g);
@@ -123,7 +123,7 @@ const CASES = [
   }
   // before/after sheet
   const sheet = await app.evaluate(({ n, ROW }) => {
-    const S = window.__retext.S, O = window.__orig, W = 560;
+    const S = window.__app.S, O = window.__orig, W = 560;
     const c = document.createElement('canvas'); c.width = W * 2 + 6; c.height = n * ROW;
     const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
     x.drawImage(O, 20, 10, W, n * ROW, 0, 0, W, n * ROW); x.drawImage(S.img, 20, 10, W, n * ROW, W + 6, 0, W, n * ROW);

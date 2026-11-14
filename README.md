@@ -1,8 +1,8 @@
-# 图片改字 · image-retext
+# Text Overwrite · 图片改字
 
 Replace text inside an image while keeping it looking the same: the new text gets the original font, weight, size, letter spacing, colour and position, and the background under the old text is filled back in. Chinese, English and mixed text.
 
-**Use it:** https://jccx.github.io/image-retext/ — on iPhone, open it in Safari, then Share → *Add to Home Screen* to use it like an app.
+**Use it:** https://jccx.github.io/text-overwrite/ — on iPhone, open it in Safari, then Share → *Add to Home Screen* to use it like an app.
 
 框住图片里的一段文字，换成新文字：字体、字重、字号、字距、颜色和位置与原文字一致，旧字底下的背景会补回来。支持中文、英文和中英混排。
 

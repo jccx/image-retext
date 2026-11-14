@@ -69,7 +69,7 @@ const gray = (f, pg, dpi) => {
   const logs = [];
   p.on('pageerror', e => logs.push('pageerror: ' + e.message));
   await p.goto(BASE);
-  await p.waitForFunction(() => window.__retext && window.__retext.S.img, null, { timeout: 20000 });
+  await p.waitForFunction(() => window.__app && window.__app.S.img, null, { timeout: 20000 });
   const files = [...new Set(CASES.map(c => c[0]))];
   let nOK = 0, nAll = 0;
   for (const file of files) {
@@ -77,11 +77,11 @@ const gray = (f, pg, dpi) => {
     if (!cases.length) continue;
     const src = path.join(OUT, file);
     if (!fs.existsSync(src)) { console.log('missing sample', file); continue; }
-    await p.evaluate(async url => { const b = await (await fetch(url)).blob(); await window.__retext.loadBlob(new File([b], url.split('/').pop(), { type: 'application/pdf' }), url.split('/').pop()); }, BASE + '__samples/' + file);
+    await p.evaluate(async url => { const b = await (await fetch(url)).blob(); await window.__app.loadBlob(new File([b], url.split('/').pop(), { type: 'application/pdf' }), url.split('/').pop()); }, BASE + '__samples/' + file);
     const res = [];
     for (const [, pno, phrase, repl] of cases) {
       const r = await p.evaluate(async ([pno, phrase, repl]) => {
-        const R = window.__retext, S = R.S;
+        const R = window.__app, S = R.S;
         if (S.pdf.cur !== pno) await pdfGo(pno);
         const pg = S.pdf.pages.get(pno), flat = [];
         for (const s of pg.map.shows) for (const g of s.g) if (String(g.u || '').trim()) flat.push(g);

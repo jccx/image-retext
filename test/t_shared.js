@@ -6,7 +6,7 @@ const { open } = require('./harness');
     const h = await open(Object.assign({ viewport: { width: 390, height: 780 }, dsf: 2, touch: true, mobile: true }, opts));
     const p = h.page;
     await p.waitForTimeout(400);
-    const P = async (ix, iy) => p.evaluate(([ix, iy]) => { const S = window.__retext.S, r = document.getElementById('stage').getBoundingClientRect(); return [r.left + S.view.tx + ix * S.view.s, r.top + S.view.ty + iy * S.view.s]; }, [ix, iy]);
+    const P = async (ix, iy) => p.evaluate(([ix, iy]) => { const S = window.__app.S, r = document.getElementById('stage').getBoundingClientRect(); return [r.left + S.view.tx + ix * S.view.s, r.top + S.view.ty + iy * S.view.s]; }, [ix, iy]);
     const boxes = [[72, 356, 800, 428, '11月21日—22日 · 10:00–18:00'], [100, 482, 372, 552, '门票 ¥25'], [72, 200, 860, 330, '周末手作市集'], [74, 108, 640, 162, 'WEEKEND CRAFT MARKET'], [74, 646, 800, 706, 'Handmade goods, coffee & live music']];
     for (const [x0, y0, x1, y1, truth] of boxes) {
       await p.waitForTimeout(350);
@@ -14,10 +14,10 @@ const { open } = require('./harness');
       await p.mouse.move(a[0], a[1]); await p.mouse.down(); await p.mouse.move(b[0], b[1], { steps: 5 }); await p.mouse.up();
       let res;
       try {
-        await p.waitForFunction(() => { const ed = window.__retext.S.edit; const st = document.getElementById('matchStatus').textContent; return ed && ((ed.st.matched && !/正在/.test(st)) || /请手动/.test(st)); }, null, { timeout: 120000 });
+        await p.waitForFunction(() => { const ed = window.__app.S.edit; const st = document.getElementById('matchStatus').textContent; return ed && ((ed.st.matched && !/正在/.test(st)) || /请手动/.test(st)); }, null, { timeout: 120000 });
         await p.waitForTimeout(300);
         await p.waitForFunction(() => !/正在/.test(document.getElementById('matchStatus').textContent), null, { timeout: 120000 });
-        res = await p.evaluate(() => { const ed = window.__retext.S.edit, st = ed.st; return { orig: document.getElementById('inOrig').value, fam: st.fam.n, w: st.weight, iou: st.score == null ? null : +(st.score * 100).toFixed(1), status: document.getElementById('matchStatus').textContent, live: !!ed.live, btn: document.getElementById('btnOcr').hidden ? 'hidden' : document.getElementById('btnOcr').textContent }; });
+        res = await p.evaluate(() => { const ed = window.__app.S.edit, st = ed.st; return { orig: document.getElementById('inOrig').value, fam: st.fam.n, w: st.weight, iou: st.score == null ? null : +(st.score * 100).toFixed(1), status: document.getElementById('matchStatus').textContent, live: !!ed.live, btn: document.getElementById('btnOcr').hidden ? 'hidden' : document.getElementById('btnOcr').textContent }; });
       } catch (e) { res = { err: e.message.split('\n')[0] }; }
       console.log(label, '|', res.orig === truth ? 'READ OK' : 'READ ≠ ', JSON.stringify(res), (Date.now() - t0) + 'ms');
       if (label === 'reader files missing') break;
@@ -29,7 +29,7 @@ const { open } = require('./harness');
       await p.waitForTimeout(350);
       const a = await P(100, 482), b = await P(372, 552);
       await p.mouse.move(a[0], a[1]); await p.mouse.down(); await p.mouse.move(b[0], b[1], { steps: 5 }); await p.mouse.up();
-      await p.waitForFunction(() => { const ed = window.__retext.S.edit; return ed && ed.st.matched && !/正在/.test(document.getElementById('matchStatus').textContent); }, null, { timeout: 120000 });
+      await p.waitForFunction(() => { const ed = window.__app.S.edit; return ed && ed.st.matched && !/正在/.test(document.getElementById('matchStatus').textContent); }, null, { timeout: 120000 });
       await p.fill('#inNew', '门票 ¥30');
       await p.waitForTimeout(300);
       await p.screenshot({ path: path.join(__dirname, 'out', 'shared-edit.png') });

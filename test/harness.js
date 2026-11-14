@@ -72,14 +72,14 @@ async function open(opts = {}) {
     route.fulfill({ status: 200, contentType: MIME[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
   });
   await page.goto('http://retext.test/index.html');
-  await page.waitForFunction(() => window.__retext && window.__retext.S.img, null, { timeout: 15000 });
+  await page.waitForFunction(() => window.__app && window.__app.S.img, null, { timeout: 15000 });
   return { browser, ctx, page, logs, stats };
 }
 
 // Wait until the current edit has a finished match (or timeout).
 async function waitMatch(page, timeout = 60000) {
   await page.waitForFunction(() => {
-    const ed = window.__retext.S.edit;
+    const ed = window.__app.S.edit;
     return ed && ed.st.matched && ed.cands.length > 0 && !/正在/.test(document.getElementById('matchStatus').textContent);
   }, null, { timeout });
 }

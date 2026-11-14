@@ -331,7 +331,7 @@ function pdfContent(L, doc, node) {
 /* lay a picture over the rectangle (x, y, w, h) of the page picture */
 function pdfDrawPatch(L, page, vp, img, x, y, w, h) {
   const bl = vp.convertToPdfPoint(x, y + h), br = vp.convertToPdfPoint(x + w, y + h), tl = vp.convertToPdfPoint(x, y);
-  const key = page.node.newXObject('ReText', img.ref);
+  const key = page.node.newXObject('Ovw', img.ref);
   page.pushOperators(L.pushGraphicsState(), L.concatTransformationMatrix(br[0] - bl[0], br[1] - bl[1], tl[0] - bl[0], tl[1] - bl[1], bl[0], bl[1]), L.drawObject(key), L.popGraphicsState());
 }
 

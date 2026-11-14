@@ -23,11 +23,11 @@ const check = (name, ok, detail) => { nAll++; if (ok) nOK++; console.log(ok ? 'O
   p.on('pageerror', e => logs.push('pageerror: ' + e.message));
   p.on('dialog', d => (password != null ? d.accept(password) : d.dismiss()));
   await p.goto(BASE);
-  await p.waitForFunction(() => window.__retext && window.__retext.S.img, null, { timeout: 20000 });
-  const openFile = file => p.evaluate(async url => { const b = await (await fetch(url)).blob(), n = url.split('/').pop(); await window.__retext.loadBlob(new File([b], n, { type: 'application/pdf' }), n); return window.__retext.S.pdf ? window.__retext.S.pdf.n : 0; }, BASE + '__samples/' + file);
+  await p.waitForFunction(() => window.__app && window.__app.S.img, null, { timeout: 20000 });
+  const openFile = file => p.evaluate(async url => { const b = await (await fetch(url)).blob(), n = url.split('/').pop(); await window.__app.loadBlob(new File([b], n, { type: 'application/pdf' }), n); return window.__app.S.pdf ? window.__app.S.pdf.n : 0; }, BASE + '__samples/' + file);
   /* select a rectangle given in PDF points from the top-left of the page, wait for the reading and the match, type the new text, apply */
   const edit = (r, repl) => p.evaluate(async ([r, repl]) => {
-    const R = window.__retext, S = R.S, k = S.pdf.pages.get(S.pdf.cur).vp.scale;
+    const R = window.__app, S = R.S, k = S.pdf.pages.get(S.pdf.cur).vp.scale;
     R.startEdit({ x: r[0] * k, y: r[1] * k, w: r[2] * k, h: r[3] * k }, false);
     const ed = S.edit, t0 = Date.now();
     await new Promise(res => { const iv = setInterval(() => { const st = document.getElementById('matchStatus').textContent; if ((ed.origText && ed.st.matched && ed.cands.length && !/正在/.test(st)) || /请手动|请在上面|没找到明显|请核对/.test(st) || Date.now() - t0 > 90000) { clearInterval(iv); res(); } }, 100); });

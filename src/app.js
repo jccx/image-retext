@@ -1300,8 +1300,8 @@ stage.addEventListener('drop', e => {
 /* ---------- offline fonts (installable build only) ----------
    在线: fonts come from this site as needed. 离线: whole packs are kept on the device (Cache Storage) and the
    service worker answers from there, so matching works with no network. Switching back to 在线 deletes them. */
-const OFF = { cache: 'retext-fonts', busy: null, sel: { latin: true, sc: true, cjk: false, pdf: true } };
-const offKey = 'retext.offline';
+const OFF = { cache: 'overwrite-fonts', busy: null, sel: { latin: true, sc: true, cjk: false, pdf: true } };
+const offKey = 'overwrite.offline';
 function offState() { try { return JSON.parse(localStorage.getItem(offKey)) || { mode: 'online', packs: {} }; } catch (e) { return { mode: 'online', packs: {} }; } }
 function offSave(st) { try { localStorage.setItem(offKey, JSON.stringify(st)); } catch (e) { /* private mode: state lives for this visit only */ } }
 const mb = b => (b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.max(0.1, b / 1e6).toFixed(b >= 1e8 ? 0 : 1) + ' MB');
@@ -1400,6 +1400,8 @@ async function offDelete(keys) {
 }
 function offInit() {
   if (BUILD !== 'pages') return;
+  /* the app used to live at another address under another name: what it stored there cannot be used here */
+  try { localStorage.removeItem('retext.offline'); if (window.caches) caches.keys().then(ks => ks.filter(k => k.startsWith('retext-')).forEach(k => caches.delete(k))).catch(() => {}); } catch (e) { /* storage unavailable */ }
   $('btnPrivacy').hidden = false;
   $('btnPrivacy').onclick = () => { $('privSheet').hidden = false; };
   $('privClose').onclick = () => { $('privSheet').hidden = true; };
@@ -1473,4 +1475,4 @@ function boot() {
   $('btnOcr').hidden = false;
 }
 boot();
-window.__retext = { S, FAM, startEdit, setOrig, commit, loadBlob, setImage, refresh };
+window.__app = { S, FAM, startEdit, setOrig, commit, loadBlob, setImage, refresh };

@@ -8,7 +8,7 @@ const { open } = require('./harness');
     await p.screenshot({ path: path.join(__dirname, 'out', `ui-${name}-idle.png`) });
     // drag a box around the date line of the demo picture
     const box = await p.evaluate(() => {
-      const S = window.__retext.S, r = document.getElementById('stage').getBoundingClientRect();
+      const S = window.__app.S, r = document.getElementById('stage').getBoundingClientRect();
       const x = document.createElement('canvas').getContext('2d'); x.font = '500 46px "Noto Sans SC"';
       const w = x.measureText('11月21日—22日 · 10:00–18:00').width;
       const P = (ix, iy) => [r.left + S.view.tx + ix * S.view.s, r.top + S.view.ty + iy * S.view.s];
@@ -19,10 +19,10 @@ const { open } = require('./harness');
     await p.mouse.move(box.b[0], box.b[1], { steps: 4 }); await p.mouse.up();
     await p.waitForTimeout(200);
     await p.fill('#inOrig', '11月21日—22日 · 10:00–18:00');
-    await p.waitForFunction(() => { const ed = window.__retext.S.edit; return ed && ed.st.matched && !/正在/.test(document.getElementById('matchStatus').textContent); }, null, { timeout: 90000 });
+    await p.waitForFunction(() => { const ed = window.__app.S.edit; return ed && ed.st.matched && !/正在/.test(document.getElementById('matchStatus').textContent); }, null, { timeout: 90000 });
     await p.fill('#inNew', '12月05日—06日 · 09:30–17:00');
     await p.waitForTimeout(300);
-    const info = await p.evaluate(() => { const st = window.__retext.S.edit.st; return { fam: st.fam.n, w: st.weight, px: st.px, score: st.score, status: document.getElementById('matchStatus').textContent, cands: window.__retext.S.edit.cands.length }; });
+    const info = await p.evaluate(() => { const st = window.__app.S.edit.st; return { fam: st.fam.n, w: st.weight, px: st.px, score: st.score, status: document.getElementById('matchStatus').textContent, cands: window.__app.S.edit.cands.length }; });
     console.log(name, JSON.stringify(info), box.note);
     await p.screenshot({ path: path.join(__dirname, 'out', `ui-${name}-edit.png`) });
     await p.click('#tune summary');

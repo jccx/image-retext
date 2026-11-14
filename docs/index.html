@@ -442,7 +442,7 @@ input[type="range"] { accent-color: var(--accent); min-width: 0; }
       <p>应用只向本站请求程序和字体文件。网站由 GitHub Pages 托管，GitHub 会像其它网站一样记录访问日志（例如 IP 地址），这些记录不含你的图片和文件。</p>
       <p>离线字体包和设置存在本机浏览器里，可以在“设置离线使用”里删除；删除这个网页的网站数据也会一并清除。</p>
       <h3>源代码公开</h3>
-      <p>全部源代码以 GNU AGPL v3 开源，可以查看、核对上面的说法：<a href="https://github.com/jccx/image-retext" target="_blank" rel="noopener">github.com/jccx/image-retext</a></p>
+      <p>全部源代码以 GNU AGPL v3 开源，可以查看、核对上面的说法：<a href="https://github.com/jccx/text-overwrite" target="_blank" rel="noopener">github.com/jccx/text-overwrite</a></p>
       <h3>使用责任</h3>
       <p>本工具仅供合法用途。修改后的图片和文件如何使用、由此产生的一切后果，由使用者自行负责。请勿用于伪造或篡改证件、票据、合同、聊天记录、截图证据等，或侵犯他人权利。</p>
       <p>本工具按“现状”提供，不保证识别、字体匹配或修改结果准确；开发者不对因使用本工具造成的任何损失或法律责任负责。</p>
@@ -2975,7 +2975,7 @@ function pdfContent(L, doc, node) {
 /* lay a picture over the rectangle (x, y, w, h) of the page picture */
 function pdfDrawPatch(L, page, vp, img, x, y, w, h) {
   const bl = vp.convertToPdfPoint(x, y + h), br = vp.convertToPdfPoint(x + w, y + h), tl = vp.convertToPdfPoint(x, y);
-  const key = page.node.newXObject('ReText', img.ref);
+  const key = page.node.newXObject('Ovw', img.ref);
   page.pushOperators(L.pushGraphicsState(), L.concatTransformationMatrix(br[0] - bl[0], br[1] - bl[1], tl[0] - bl[0], tl[1] - bl[1], bl[0], bl[1]), L.drawObject(key), L.popGraphicsState());
 }
 
@@ -4443,8 +4443,8 @@ stage.addEventListener('drop', e => {
 /* ---------- offline fonts (installable build only) ----------
    在线: fonts come from this site as needed. 离线: whole packs are kept on the device (Cache Storage) and the
    service worker answers from there, so matching works with no network. Switching back to 在线 deletes them. */
-const OFF = { cache: 'retext-fonts', busy: null, sel: { latin: true, sc: true, cjk: false, pdf: true } };
-const offKey = 'retext.offline';
+const OFF = { cache: 'overwrite-fonts', busy: null, sel: { latin: true, sc: true, cjk: false, pdf: true } };
+const offKey = 'overwrite.offline';
 function offState() { try { return JSON.parse(localStorage.getItem(offKey)) || { mode: 'online', packs: {} }; } catch (e) { return { mode: 'online', packs: {} }; } }
 function offSave(st) { try { localStorage.setItem(offKey, JSON.stringify(st)); } catch (e) { /* private mode: state lives for this visit only */ } }
 const mb = b => (b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.max(0.1, b / 1e6).toFixed(b >= 1e8 ? 0 : 1) + ' MB');
@@ -4543,6 +4543,8 @@ async function offDelete(keys) {
 }
 function offInit() {
   if (BUILD !== 'pages') return;
+  /* the app used to live at another address under another name: what it stored there cannot be used here */
+  try { localStorage.removeItem('retext.offline'); if (window.caches) caches.keys().then(ks => ks.filter(k => k.startsWith('retext-')).forEach(k => caches.delete(k))).catch(() => {}); } catch (e) { /* storage unavailable */ }
   $('btnPrivacy').hidden = false;
   $('btnPrivacy').onclick = () => { $('privSheet').hidden = false; };
   $('privClose').onclick = () => { $('privSheet').hidden = true; };
@@ -4616,7 +4618,7 @@ function boot() {
   $('btnOcr').hidden = false;
 }
 boot();
-window.__retext = { S, FAM, startEdit, setOrig, commit, loadBlob, setImage, refresh };
+window.__app = { S, FAM, startEdit, setOrig, commit, loadBlob, setImage, refresh };
 
 </script>
 </body>

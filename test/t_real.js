@@ -96,8 +96,8 @@ const CASES = SET === 'mix' ? MIX : SET === 'bg' ? BGS : BASE;
       const bmp = await createImageBitmap(blob); const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
       blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.62));
     }
-    await window.__retext.loadBlob(blob, 'shot');
-    const S = window.__retext.S; const k = document.createElement('canvas'); k.width = S.iw; k.height = S.ih; k.getContext('2d').drawImage(S.img, 0, 0); window.__orig = k;
+    await window.__app.loadBlob(blob, 'shot');
+    const S = window.__app.S; const k = document.createElement('canvas'); k.width = S.iw; k.height = S.ih; k.getContext('2d').drawImage(S.img, 0, 0); window.__orig = k;
   }, { b64: shot.toString('base64'), jpg: variant === 'jpg' });
   const out = [];
   const readStats = { n: 0, ok: 0 };
@@ -110,7 +110,7 @@ const CASES = SET === 'mix' ? MIX : SET === 'bg' ? BGS : BASE;
     let res;
     try {
       res = await app.evaluate(async ({ c, box }) => {
-        const R = window.__retext, S = R.S;
+        const R = window.__app, S = R.S;
         R.startEdit(box, false);
         const ed = S.edit;
         if (window.__READ) {
@@ -136,7 +136,7 @@ const CASES = SET === 'mix' ? MIX : SET === 'bg' ? BGS : BASE;
   }
   // 3. contact sheet: before | after for each case
   const sheet = await app.evaluate(({ rects, dsf, ids }) => {
-    const S = window.__retext.S, O = window.__orig;
+    const S = window.__app.S, O = window.__orig;
     const rowH = 96 * dsf, W = 840 * dsf, z = dsf >= 2 ? 0.75 : 1.5;
     const half = Math.round(520 * (dsf >= 2 ? 1.5 : 1));
     const c = document.createElement('canvas'); c.width = Math.round(half * z) * 2 + 6; c.height = Math.round(ids.length * (88 * dsf * z + 4));

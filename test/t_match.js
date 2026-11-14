@@ -31,7 +31,7 @@ const CASES = [
     let r;
     try {
       r = await page.evaluate(async cs => {
-        const R = window.__retext, S = R.S;
+        const R = window.__app, S = R.S;
         const fam = R.FAM.get(cs.fam);
         await ensureCss([fam]);
         await ensureFace({ fam, weight: cs.w, italic: !!cs.italic }, cs.text);

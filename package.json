@@ -1,5 +1,5 @@
 {
-  "name": "image-retext",
+  "name": "text-overwrite",
   "version": "1.0.0",
   "private": true,
   "description": "Replace text in images while keeping the original font, colour and layout. Runs in the browser, works offline.",

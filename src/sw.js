@@ -1,15 +1,16 @@
 /* 图片改字 service worker.
    - The app itself (page, icons, manifest) is kept on the device, so it opens without a network.
-   - Fonts: answered from the downloaded packs (Cache Storage "retext-fonts") when present, otherwise from the network.
-   - A new version is fetched in the background and used from the next launch. */
+   - Fonts: answered from the downloaded packs (Cache Storage "overwrite-fonts") when present, otherwise from the network.
+   - A new version is fetched in the background and used from the next launch.
+   - What the app stored under its former name (retext-…) is removed: those copies belong to the old address. */
 const VERSION = '__VERSION__';
-const SHELL = 'retext-shell-' + VERSION, FONTS = 'retext-fonts';
+const SHELL = 'overwrite-shell-' + VERSION, FONTS = 'overwrite-fonts';
 const SHELL_FILES = __SHELL__;
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('retext-shell-') && k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => (k.startsWith('overwrite-shell-') && k !== SHELL) || k.startsWith('retext-')).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
   const req = e.request;
