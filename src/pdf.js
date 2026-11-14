@@ -294,7 +294,7 @@ function pdfFindLeft() {
 }
 function pdfFindInfo() {
   const P = findCtx(), box = $('findBox');
-  box.hidden = !P || BUILD !== 'pages' || (P.isPic && (S.demo || !S.img));
+  box.hidden = !P || BUILD !== 'pages' || (P.isPic && !S.img);
   if (box.hidden) return;
   const F = P.find, O = P.ocr, pic = P.isPic, info = $('findInfo'), few = a => (a.length > 8 ? a.slice(0, 8).join('、') + '…' : a.join('、'));
   /* reading the pictures is offered once, and only where there are pictures */
