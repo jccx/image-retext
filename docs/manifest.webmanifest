@@ -1,7 +1,7 @@
 {
-  "name": "图片改字",
-  "short_name": "图片改字",
-  "description": "框住图片里的文字，换成新文字，字体、颜色、位置保持一致。",
+  "name": "查缺补漏",
+  "short_name": "查缺补漏",
+  "description": "框住图片或 PDF 里的文字，换成新文字，字体、颜色、位置保持一致。",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",

@@ -139,7 +139,29 @@ def special():
     page.Annots.append(note)
     pdf.save()
 
-for f in (reportlab_basic, raw_ops, latex, libreoffice, mpl, special):
+def repeat():
+    """One name many times over three pages, in several fonts and sizes: for the search."""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
+    c = canvas.Canvas(os.path.join(OUT, 'repeat.pdf'), pagesize=letter)
+    c.setFont('Helvetica-Bold', 20); c.drawString(72, 720, 'Harbor Street Studio')
+    c.setFont('Times-Roman', 12); c.drawString(72, 690, 'This agreement is made between Harbor Street Studio and the client named below.')
+    c.setFont('Helvetica', 11); c.drawString(72, 660, 'Supplier'); c.drawString(330, 660, 'Harbor Street Studio')
+    c.setFont('STSong-Light', 13); c.drawString(72, 620, '甲方：海港街工作室（以下简称甲方）')
+    c.showPage()
+    c.setFont('Times-Roman', 12); c.drawString(72, 720, 'Invoices are issued by Harbor Street Studio; payments go to HARBOR STREET STUDIO only.')
+    c.setFont('Helvetica', 11); c.drawString(72, 690, 'Nothing to change on this line.')
+    c.setFont('STSong-Light', 13); c.drawString(72, 650, '收款单位为海港街工作室。')
+    c.showPage()
+    c.setFont('Helvetica', 11); c.drawString(72, 720, 'Signed for and on behalf of')
+    c.setFont('Helvetica-Oblique', 12); c.drawString(72, 700, 'Harbor Street Studio')
+    c.setFont('Courier', 9); c.drawString(72, 60, 'Harbor Street Studio - page 3 of 3')
+    c.showPage(); c.save()
+
+for f in (reportlab_basic, raw_ops, latex, libreoffice, mpl, special, repeat):
     try: f()
     except Exception as e: print(f.__name__, 'failed:', e)
 print(sorted(x for x in os.listdir(OUT) if x.endswith('.pdf')))

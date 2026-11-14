@@ -124,11 +124,15 @@ const pdfWS = c => c === 0 || c === 9 || c === 10 || c === 12 || c === 13 || c =
 const pdfDelim = c => c === 40 || c === 41 || c === 60 || c === 62 || c === 91 || c === 93 || c === 123 || c === 125 || c === 47 || c === 37;
 const pdfLatin1 = (b, s, e) => { let t = ''; for (let i = s; i < e; i++) t += String.fromCharCode(b[i]); return t; };
 
-/* the text-showing operators of a content stream, in order → [{ op, s, e, items, pre }]
-   s..e is the byte range of the operator with its operands; items are the strings and numbers it shows */
+/* the text-showing operators of a content stream, in order → [{ op, s, e, items, pre, st }]
+   s..e is the byte range of the operator with its operands; items are the strings and numbers it shows;
+   st is what was in force there: { font: '/F1', size, fill: the operators that set the fill colour ('' = the default black,
+   null = not understood), gs: the graphics-state dictionaries applied } */
 function pdfScanShows(b) {
-  const n = b.length, out = [];
-  let i = 0, opd = [];
+  const n = b.length, out = [], stack = [];
+  let i = 0, opd = [], g = { font: '', size: 0, cs: '', col: '', gs: [] };
+  const raw = () => (opd.length ? pdfLatin1(b, opd[0].s, opd[opd.length - 1].e) : '');
+  const nums = k => opd.length === k && opd.every(o => o.t === 'num');
   while (i < n) {
     const c = b[i];
     if (pdfWS(c)) { i++; continue; }
@@ -181,8 +185,15 @@ function pdfScanShows(b) {
           else items = null;
         }
       }
-      out.push({ op: word, s: first ? first.s : s, e: i, items, pre });
-    }
+      out.push({ op: word, s: first ? first.s : s, e: i, items, pre,
+        st: { font: g.font, size: g.size, fill: g.col === null ? null : (g.cs ? g.cs + ' ' : '') + g.col, gs: g.gs.slice() } });
+    } else if (word === 'q') stack.push({ font: g.font, size: g.size, cs: g.cs, col: g.col, gs: g.gs.slice() });
+    else if (word === 'Q') { if (stack.length) g = stack.pop(); }
+    else if (word === 'Tf') { const m = opd.length; if (m >= 2 && opd[m - 2].t === 'name' && opd[m - 1].t === 'num') { g.font = pdfLatin1(b, opd[m - 2].s, opd[m - 2].e); g.size = +pdfLatin1(b, opd[m - 1].s, opd[m - 1].e); } else g.font = ''; }
+    else if (word === 'g' || word === 'rg' || word === 'k') { g.cs = ''; g.col = nums(word === 'g' ? 1 : word === 'rg' ? 3 : 4) ? raw() + ' ' + word : null; }
+    else if (word === 'cs') { if (opd.length === 1 && opd[0].t === 'name') { g.cs = raw() + ' cs'; g.col = ''; } else { g.cs = ''; g.col = null; } }
+    else if (word === 'sc' || word === 'scn') g.col = opd.length && opd.every(o => o.t === 'num') ? raw() + ' ' + word : null;   // a pattern (named) cannot be repeated elsewhere
+    else if (word === 'gs') { if (opd.length === 1 && opd[0].t === 'name') g.gs.push(raw()); }
     opd = [];
   }
   return out;
@@ -213,6 +224,15 @@ function pdfStrBytes(b, tok) {
     else out.push(c);
   }
   return out;
+}
+
+/* how many bytes one character code takes in this text-showing operator (0 when that cannot be told) */
+function pdfCodeBytes(b, sh, rec) {
+  if (!sh || !sh.items || !rec) return 0;
+  let nB = 0, nG = 0;
+  for (const it of sh.items) if (it.t === 'str' || it.t === 'hex') nB += pdfStrBytes(b, it).length;
+  for (const g of rec.glyphs) if (typeof g !== 'number') nG++;
+  return nG && nB % nG === 0 && nB / nG <= 4 ? nB / nG : 0;
 }
 
 const pdfNum = v => { const t = (Math.abs(v) < 1e-6 ? 0 : v).toFixed(4).replace(/\.?0+$/, ''); return t === '-0' ? '0' : t; };
@@ -265,7 +285,7 @@ function pdfRewriteShow(b, sh, rec, rm) {
    shows: map.shows. → { bytes, done: [k…], failed: [{ k, why }] } */
 function pdfStrip(content, map, jobs) {
   const scan = pdfScanShows(content), failed = [], done = [];
-  if (scan.length !== map.nTop) return { bytes: null, done, failed: [...jobs.keys()].map(k => ({ k, why: 'operator count differs (' + scan.length + ' in the file, ' + map.nTop + ' drawn)' })) };
+  if (scan.length !== map.nTop) return { bytes: null, done, scan: null, failed: [...jobs.keys()].map(k => ({ k, why: 'operator count differs (' + scan.length + ' in the file, ' + map.nTop + ' drawn)' })) };
   const byK = new Map();
   for (const s of map.shows) if (s.top) byK.set(s.k, s);
   const parts = [], enc = new TextEncoder();
@@ -283,5 +303,44 @@ function pdfStrip(content, map, jobs) {
   const bytes = new Uint8Array(len);
   let o = 0;
   for (const p of parts) { bytes.set(p, o); o += p.length; }
-  return { bytes, done, failed };
+  return { bytes, done, failed, scan };
+}
+
+/* ---------- new text as text ---------- */
+/* One line of new text as PDF operators. chars: [{ hex, adv, x, font }] in drawing order: hex = the character code(s),
+   adv = the advance the font gives that glyph and x = where its pen origin has to be, both in units of the type size
+   from the start of the line; font = the resource name it is set in. Every glyph is put exactly at x: the gaps go into
+   the TJ array as kerning numbers. → 'Tf … TJ' operators (the text matrix is set by the caller). */
+function pdfLineOps(chars, size) {
+  const out = [];
+  let font = null, arr = [], run = '', pen = 0;
+  const flushRun = () => { if (run) { arr.push('<' + run + '>'); run = ''; } };
+  const flushArr = () => { flushRun(); if (arr.length) out.push('[' + arr.join(' ') + '] TJ'); arr = []; };
+  for (const c of chars) {
+    if (c.font !== font) { flushArr(); font = c.font; out.push(font + ' ' + pdfNum(size) + ' Tf'); }
+    const kern = (pen - c.x) * 1000;                    // TJ numbers: thousandths of the type size, positive moves left
+    if (Math.abs(kern) >= 0.05) { flushRun(); arr.push(pdfNum(kern)); pen = c.x; }
+    run += c.hex; pen += c.adv;
+  }
+  flushArr();
+  return out.join(' ');
+}
+
+/* Does the saved page show the new text the way the app drew it? M: how much of each pixel the app's new text covered (0–255),
+   A: the app's picture, B: the saved page drawn again (both RGBA, w×h), col: the text colour.
+   A glyph may sit a pixel off, so a pixel is compared with its neighbours. → { core, miss, extra }:
+   core = pixels the new text covers solidly, miss = those where the saved page has no such ink,
+   extra = pixels where the saved page has ink of that colour and the app's picture has none. */
+function pdfInkCheck(M, A, B, w, h, col, tol) {
+  const T = tol || 72, near = new Uint8Array(w * h), nearA = new Uint8Array(w * h);
+  const like = (d, p) => Math.abs(d[p] - col[0]) <= T && Math.abs(d[p + 1] - col[1]) <= T && Math.abs(d[p + 2] - col[2]) <= T;
+  for (let i = 0, p = 0; i < w * h; i++, p += 4) { if (like(B, p)) near[i] = 1; if (like(A, p)) nearA[i] = 1; }
+  const any = (a, x, y) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < w && yy < h && a[yy * w + xx]) return true; } return false; };
+  let core = 0, miss = 0, extra = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (M[i] >= 204) { core++; if (!any(near, x, y)) miss++; }
+    if (near[i] && !any(nearA, x, y)) extra++;
+  }
+  return { core, miss, extra };
 }

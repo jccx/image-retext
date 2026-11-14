@@ -58,8 +58,17 @@ const box = async (p, x0, y0, x1, y1) => p.evaluate(async ([x0, y0, x1, y1]) => 
           window.__app.startEdit({ x: 70 * k, y: 150 * k, w: 135 * k, h: 18 * k }, false);
           const ed = S.edit, t0 = Date.now(); await new Promise(res => { const iv = setInterval(() => { if ((ed.origText && ed.st.matched && !/正在/.test(document.getElementById('matchStatus').textContent)) || Date.now() - t0 > 60000) { clearInterval(iv); res(); } }, 100); });
           const all = S.pdf.pages.get(1).map.shows.map(s => s.g.map(g => g.u).join('')).join(' ');
+          const type = async t => { const el = document.getElementById('inNew'); el.value = t; el.dispatchEvent(new Event('input', { bubbles: true })); await new Promise(r => setTimeout(r, 600)); };
+          await type('Total due: $9,375.60');
           window.__app.commit('text', true);
-          return { opened: true, pages: S.pdf.n, read: ed.origText, font: ed.st.fam.label || ed.st.fam.n, chinese: /人民币/.test(all) };
+          /* a second edit, in a library font (the file does not carry its Chinese font), then save: both go into the file as text, without a network */
+          window.__app.startEdit({ x: 150 * k, y: 345 * k, w: 142 * k, h: 23 * k }, false);
+          const e2 = S.edit, t1 = Date.now(); await new Promise(res => { const iv = setInterval(() => { if ((e2.origText && e2.st.matched && !/正在/.test(document.getElementById('matchStatus').textContent)) || Date.now() - t1 > 60000) { clearInterval(iv); res(); } }, 100); });
+          await type('人民币 2,950.75 元');
+          const font2 = e2.st.fam.label || e2.st.fam.n;
+          window.__app.commit('text', true);
+          const o = await pdfBuild(false);
+          return { opened: true, pages: S.pdf.n, read: ed.origText, font: ed.st.fam.label || ed.st.fam.n, chinese: /人民币/.test(all), read2: e2.origText, font2, saved: { text: o.report.text, pics: o.report.pics, why: o.report.why, checked: o.report.checked, kb: Math.round(o.bytes.length / 1024) } };
         }, fs.readFileSync(f).toString('base64'));
         console.log('  pdf  ', JSON.stringify(r));
       } else console.log('  pdf   (no sample: run python3 test/pdf/make_samples.py)');

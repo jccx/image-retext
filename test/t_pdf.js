@@ -1,6 +1,7 @@
 // PDF editing end to end in the installable build: open → select a phrase → the original text comes from the PDF itself →
 // font match → replace → save. The saved PDF is then checked with poppler (independent of pdf.js):
-//   the old phrase is gone from the text, every other word is where it was, pixels outside the edits are unchanged.
+//   the old phrase is gone from the text, every other word is where it was, pixels outside the edits are unchanged;
+//   an edit written as text has its new phrase in the file's text, adds no picture, and looks in poppler as it did in the app.
 // Samples: python3 test/pdf/make_samples.py && node test/pdf/make_chrome.js
 //   node test/t_pdf.js [filter]        (CHROME=/path/to/chrome to use a system browser)
 const { chromium } = require('playwright');
@@ -98,18 +99,44 @@ const gray = (f, pg, dpi) => {
         const out = { read: ed.origText, tier: ed.ocr && ed.ocr.tier, fam: ed.st.fam.n, weight: ed.st.weight, italic: ed.st.italic, iou: ed.st.score && +(ed.st.score * 100).toFixed(1), hint: ed.pdfHint && ed.pdfHint.label, ms: Date.now() - t0, rect, scale: pg.vp.scale };
         const el = document.getElementById('inNew'); el.value = repl; el.dispatchEvent(new Event('input', { bubbles: true }));
         await new Promise(r => setTimeout(r, 150));
-        out.used = (ed.st.fam.label || ed.st.fam.n) + ' ' + ed.st.weight; out.own = !!ed.st.fam.pdf; out.fit = ed.st.score && +(ed.st.score * 100).toFixed(1);
+        out.used = (ed.st.fam.label || ed.st.fam.n) + ' ' + ed.st.weight; out.own = !!ed.st.fam.pdf; out.whole = !!(ed.st.fam.pdf && ed.st.fam.pdf.whole); out.sys = !ed.st.fam.pdf && !pdfEmbeddable(ed.st.fam); out.fit = ed.st.score && +(ed.st.score * 100).toFixed(1);
         out.status = document.getElementById('matchStatus').textContent;
+        out.cands = ed.cands.slice(0, 10).map(r => (r.fam.label || r.fam.n) + ' ' + r.weight + ':' + (r.score * 100).toFixed(1) + (r.rough ? '~' : '') + (r.fam.sys ? 's' : ''));
         R.commit('text', true);
         return out;
       }, [pno, phrase, repl]);
       res.push(r);
     }
     // save
-    const saved = await p.evaluate(async () => { const o = await pdfBuild(false); let s = ''; for (let i = 0; i < o.bytes.length; i += 32768) s += String.fromCharCode.apply(null, o.bytes.subarray(i, i + 32768)); return { b64: btoa(s), report: o.report, text: pdfReportText(o.report) }; });
+    const saved = await p.evaluate(async () => { PDFS.log = []; const o = await pdfBuild(false); o.report.log = PDFS.log.slice(0, 12); if (PDFS.bad) { let q = ''; for (let i = 0; i < PDFS.bad.length; i += 32768) q += String.fromCharCode.apply(null, PDFS.bad.subarray(i, i + 32768)); o.report.bad = btoa(q); PDFS.bad = null; } let s = ''; for (let i = 0; i < o.bytes.length; i += 32768) s += String.fromCharCode.apply(null, o.bytes.subarray(i, i + 32768)); const eds = []; for (const [no, pg] of [...S.pdf.pages.entries()].sort((a, b) => a[0] - b[0])) for (const e of pg.edits) { const d = e.after.data, g = new Uint8Array(e.w * e.h); for (let i = 0, q = 0; i < g.length; i++, q += 4) g[i] = Math.round(0.299 * d[q] + 0.587 * d[q + 1] + 0.114 * d[q + 2]); let t = ''; for (let i = 0; i < g.length; i += 32768) t += String.fromCharCode.apply(null, g.subarray(i, i + 32768)); eds.push({ no, x: e.x, y: e.y, w: e.w, h: e.h, scale: pg.vp.scale, g: btoa(t) }); }
+      return { b64: btoa(s), report: o.report, eds, text: pdfReportText(o.report) }; });
+    if (saved.report.bad) { fs.writeFileSync(path.join(OUT, 'bad-' + file), Buffer.from(saved.report.bad, 'base64')); delete saved.report.bad; }
     const outFile = path.join(OUT, 'out-' + file);
     fs.writeFileSync(outFile, Buffer.from(saved.b64, 'base64'));
     const tAfter = text(outFile).replace(/\s+/g, ' ');
+    /* edits written as text: how they look in poppler against how they looked in the app (ink correlation over the edit's rectangle) */
+    const look = new Map(), mode = new Map(), render = new Map();
+    (saved.report.list || []).forEach((m, i) => {
+      const e = saved.eds[i];
+      mode.set(i, m);
+      if (!m[1] || !e || e.no !== m[0]) return;
+      const dpi = e.scale * 72, key = e.no + '@' + dpi;
+      if (!render.has(key)) render.set(key, gray(outFile, e.no, dpi));
+      const R = render.get(key), A = Buffer.from(e.g, 'base64');
+      let sa = 0, sb = 0, n = 0;
+      const a = [], b = [];
+      for (let y = 1; y < e.h - 1; y++) for (let x = 1; x < e.w - 1; x++) {
+        let va = 0, vb = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { va += 255 - A[(y + dy) * e.w + x + dx]; const X = e.x + x + dx, Y = e.y + y + dy; vb += X < R.w && Y < R.h ? 255 - R.d[Y * R.w + X] : 0; }
+        a.push(va); b.push(vb); sa += va; sb += vb; n++;
+      }
+      const ma = sa / n, mb = sb / n;
+      let num = 0, da = 0, db = 0;
+      for (let i2 = 0; i2 < n; i2++) { num += (a[i2] - ma) * (b[i2] - mb); da += (a[i2] - ma) ** 2; db += (b[i2] - mb) ** 2; }
+      look.set(i, da && db ? num / Math.sqrt(da * db) : 0);
+    });
+    const nImg = f => execFileSync('pdfimages', ['-list', f], quiet).split('\n').slice(2).filter(Boolean).length;
+    const imgAdded = nImg(outFile) - nImg(src), pics = (saved.report.list || []).filter(m => !m[1]).length;
     const byPage = new Map();
     cases.forEach((c, i) => { if (!byPage.has(c[1])) byPage.set(c[1], []); byPage.get(c[1]).push(res[i]); });
     const pageNote = new Map();
@@ -146,12 +173,25 @@ const gray = (f, pg, dpi) => {
         if (c[4] === 'own' && !r.own) msg += ' expected the PDF\'s own font';
         if (c[4] === 'lib' && r.own) msg += ' expected a library font';
         msg += pageNote.get(pno) || '';
+        /* which edit of the saved file this case is: the edits of a page are kept in the order they were made */
+        const idx = (() => { let k = -1, seen = 0; const nth = cases.slice(0, i).filter(q => q[1] === pno).length; (saved.report.list || []).forEach((m, j) => { if (m[0] === pno && k < 0) { if (seen === nth) k = j; seen++; } }); return k; })();
+        const m = mode.get(idx);
+        r.mode = m ? (m[1] ? 'text' : 'pic:' + m[2]) : '?';
+        if (m && m[1]) {
+          if (!tAfter.replace(/\s/g, '').includes(repl.replace(/\s/g, ''))) msg += ' new text not in the file as text';
+          r.look = look.get(idx);
+          /* a font that is not in the file is drawn by every reader with its own stand-in: no comparison there */
+          if (!r.whole && !(r.look > 0.85)) msg += ' looks different in poppler (' + (r.look || 0).toFixed(2) + ')';
+        } else if (c[4] !== 'weak' && !(r.sys && m && m[2] === 'sysfont')) msg += ' saved as a picture (' + (m ? m[2] : '?') + ')';   // a font of this machine cannot go into the file
       }
       const rot = file === 'rawops.pdf' && pno === 2;
       const ok = !msg || (rot && !/still in file|read=/.test(msg));
       if (ok) nOK++;
-      console.log(ok ? 'OK  ' : 'FAIL', file.padEnd(16), 'p' + pno, JSON.stringify(phrase).padEnd(28), r.err ? '' : r.used.padEnd(34) + String(r.fit).padStart(5) + '%  ' + String(r.ms).padStart(5) + 'ms', msg, r.own ? '' : '| ' + r.status.slice(0, 60));
+      console.log(ok ? 'OK  ' : 'FAIL', file.padEnd(16), 'p' + pno, JSON.stringify(phrase).padEnd(28), r.err ? '' : r.used.padEnd(34) + String(r.fit).padStart(5) + '%  ' + String(r.ms).padStart(5) + 'ms', (r.mode || '') + (r.look != null ? ' ' + r.look.toFixed(3) : ''), msg, r.own ? '' : '| ' + r.status.slice(0, 60));
     });
+    if (imgAdded !== pics) { console.log('FAIL', file, 'pictures added to the file:', imgAdded, 'edits saved as pictures:', pics); nAll++; }
+    delete saved.report.log; delete saved.report.list;
+    if (process.env.DEBUG) res.forEach((r, i) => { if (r.cands && !r.own) console.log('      ', cases[i][2], '→', r.cands.join(' | ')); });
     console.log('     saved', path.basename(outFile), (fs.statSync(outFile).size / 1024).toFixed(0) + ' KB (was ' + (fs.statSync(src).size / 1024).toFixed(0) + ' KB)', JSON.stringify(saved.report));
   }
   console.log('summary', nOK + '/' + nAll);

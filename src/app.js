@@ -241,6 +241,15 @@ function zoomAt(px, py, f) {
   S.fitted = false;
   requestDraw();
 }
+/* bring a rectangle of the picture into view, large enough to read */
+function showRect(r) {
+  if (!S.vw) return;
+  const fit = Math.max(0.01, fitScale()), want = clamp(Math.min((0.7 * S.vw) / r.w, (0.2 * S.vh) / r.h), fit, Math.max(fit, 8));
+  const s = S.view.s >= want * 0.6 && S.view.s <= want * 1.7 && r.w * S.view.s <= 0.9 * S.vw ? S.view.s : want;      // the zoom in use stays when it shows the spot well enough
+  S.view = { s, tx: S.vw / 2 - (r.x + r.w / 2) * s, ty: S.vh * 0.45 - (r.y + r.h / 2) * s };
+  S.fitted = false;
+  requestDraw();
+}
 const toImg = (px, py) => ({ x: (px - S.view.tx) / S.view.s, y: (py - S.view.ty) / S.view.s });
 function stagePt(e) { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
@@ -291,6 +300,7 @@ function analyzeEdit(ed, keepGrow) {
   ed.rect = clampRect({ x: ur.x - pad, y: ur.y - pad, w: ur.w + 2 * pad, h: ur.h + 2 * pad });
   const img = S.ictx.getImageData(ed.rect.x, ed.rect.y, ed.rect.w, ed.rect.h);
   ed.an = analyzeRegion(img, keepGrow != null ? { grow: keepGrow } : null);
+  if (S.pdf) pdfProtect(ed);
   ed.bands = findBands(ed.an.alpha, ed.an.w, ed.an.h, ed.origLines.length || 0);
 }
 function startEdit(userRect, keep) {
@@ -303,8 +313,10 @@ function startEdit(userRect, keep) {
   }
   const ed = {
     userRect, rect: null, an: null, bands: [], origText: carry ? carry.origText : '', newText: carry ? carry.newText : '',
-    origLines: carry ? carry.origLines : [], cands: [], fit: [], matchToken: 0, tier: carry ? carry.tier : 1, live: null, primary: 0, T2: null, userColor: false
+    origLines: carry ? carry.origLines : [], cands: [], fit: [], matchToken: 0, tier: carry ? carry.tier : 1, live: null, primary: 0, T2: null, userColor: false,
+    find: carry ? carry.find : PDFS.findHit || null          // the occurrence of a searched text this edit is for
   };
+  PDFS.findHit = null;
   S.edit = ed;
   analyzeEdit(ed, null);
   const b0 = ed.bands[0];
@@ -526,9 +538,10 @@ function compose(ed, mode) {
       bd[p] = an.bR[i]; bd[p + 1] = an.bG[i]; bd[p + 2] = an.bB[i];
     }
   }
+  let cov = null;
   if (lines.length) {
     setInk(st.color);
-    let cov = textCoverage(st, lines.map(l => ({ text: l.text, ox: l.ox + ox, oy: l.oy + oy })), px, tr, wr.w, wr.h, 0);
+    cov = textCoverage(st, lines.map(l => ({ text: l.text, ox: l.ox + ox, oy: l.oy + oy })), px, tr, wr.w, wr.h, 0, !!S.pdf);
     if (st.blur > 0.05) cov = gaussBlur(cov, wr.w, wr.h, st.blur);
     const cr = st.color[0], cg = st.color[1], cb = st.color[2];
     for (let i = 0, p = 0; i < cov.length; i++, p += 4) {
@@ -537,7 +550,7 @@ function compose(ed, mode) {
       bd[p] += (cr - bd[p]) * a; bd[p + 1] += (cg - bd[p + 1]) * a; bd[p + 2] += (cb - bd[p + 2]) * a;
     }
   }
-  return { x: wr.x, y: wr.y, w: wr.w, h: wr.h, data: base };
+  return { x: wr.x, y: wr.y, w: wr.w, h: wr.h, data: base, cov };
 }
 
 function renderLive() {
@@ -560,14 +573,16 @@ function commit(mode, quiet) {
   const out = compose(ed, mode);
   const before = S.ictx.getImageData(out.x, out.y, out.w, out.h);
   S.ictx.putImageData(out.data, out.x, out.y);
-  S.undo.push({ x: out.x, y: out.y, data: before, after: out.data });
+  /* on a PDF page: what the edit replaced and how the new text is set, so that saving can write it into the file as text */
+  S.undo.push({ x: out.x, y: out.y, data: before, after: out.data, pdf: S.pdf ? pdfEditInfo(ed, mode, out) : null });
   if (S.undo.length > 60 && !S.pdf) S.undo.shift();      // every edit of a PDF page is needed to write it back
   PDFS.out = null;
   $('btnUndo').disabled = false;
   S.lastFam = ed.st.fam;
   S.edit = null;
   $('pEdit').hidden = true; $('pIdle').hidden = false;
-  if (!quiet) toast(mode === 'erase' ? '已擦除。可以继续框选' : '已应用。可以继续框选其它文字');
+  const left = pdfFindApplied(ed, mode);
+  if (!quiet) toast(mode === 'erase' ? '已擦除。可以继续框选' : left > 0 ? '已应用。查找的文字还剩 ' + left + ' 处没改' : left === 0 ? '已应用。查找到的几处都改完了' : '已应用。可以继续框选其它文字');
   requestDraw();
 }
 function undo() {
@@ -577,6 +592,7 @@ function undo() {
   S.ictx.putImageData(u.data, u.x, u.y);
   PDFS.out = null;
   $('btnUndo').disabled = !S.undo.length;
+  pdfFindInfo();
   requestDraw();
 }
 
@@ -817,8 +833,15 @@ async function runMatch() {
   }
   ed.cands = list;
   if (!refined.length) { setStatus('没能比对出字体，可以在“微调”里手动选。', true); renderCands(); return; }
-  adopt(refined[0], true);
-  const best = refined[0];
+  /* for a PDF, a font that can be put into the file keeps the new text real text, a device font makes it a picture:
+     the former is taken when it fits nearly as well */
+  let best = refined[0];
+  if (S.pdf && BUILD === 'pages' && !best.fam.pdf) {
+    const fits = async r => !r.fam.pdf && pdfEmbeddable(r.fam) && !(await pdfUncovered(r.fam, r.weight, r.italic, ed.origText));
+    if (!(await fits(best))) for (const r of refined) if (r !== best && r.score >= best.score - 0.1 && (await fits(r))) { best = r; break; }
+    if (stale()) return;
+  }
+  adopt(best, true);
   pdfFontFor(ed);
   if (ed.ocr && !ed.ocr.reread && ed.origText === ed.ocr.text) {
     const gs = glyphScores(best, text, ed.T2, best).map(g => g.iou).sort((p, q) => p - q);
@@ -832,6 +855,7 @@ async function runMatch() {
   if (ed.ocr && ed.ocr.doubt && !S.sample) { ed.ocr.doubt = false; setStatus(ed.ocr.reread && ed.ocr.tier === 'local' ? '这段字读得没把握，已填上最接近的结果，请核对改正。' : '有的字可能读错了，请核对上面的原文字。', true); }
   else if (best.iou < 0.55) setStatus('没找到很接近的字体。可以在“微调”里手动选，或上传字体文件。', true);
   else setStatus(ed.tier < 2 && scriptOf(text) === 'latin' && best.iou < 0.8 ? '不够像的话，“微调”里可以在更多字体里再找一遍。' : best.fam.pdf && ed.st.fam === best.fam ? '用的是 PDF 自带的字体，和原文一致。' : ed.pdfAlt ? $('matchStatus').textContent : hint ? 'PDF 里这段字写的字体名是 ' + hint.label + '。' : '', !!ed.pdfAlt);
+  pdfFontNote(ed);
   renderCands();
 }
 
@@ -953,7 +977,7 @@ function setOrig(v, fromOcr) {
   if (!ed) return;
   ed.origText = v;
   ed.origLines = v.split('\n').map(s => s.trim()).filter(Boolean);
-  if (fromOcr) { $('inOrig').value = v; autoRows($('inOrig')); if (!ed.newText) { ed.newText = v; $('inNew').value = v; autoRows($('inNew')); } }
+  if (fromOcr) { $('inOrig').value = v; autoRows($('inOrig')); if (!ed.newText) { ed.newText = pdfFindRepl(ed) || v; $('inNew').value = ed.newText; autoRows($('inNew')); } }
   if (ed.origLines.length) scheduleMatch(fromOcr ? 0 : 550);
   else { ed.matchToken++; ed.st.matched = false; ed.st.score = null; ed.cands = []; renderCands(); computeFit(ed); refresh(); setStatus('输入原文字后，自动比对字体。'); }
 }
@@ -966,6 +990,7 @@ $('inNew').addEventListener('input', e => {
   if (!ed) return;
   ed.newText = e.target.value;
   pdfFontFor(ed);
+  pdfCoverNote(ed);
   if (!ed.st.matched && ed.an.found) {
     computeFit(ed);
     if (!ed.origLines.length && ed.newText.trim() && !/正在/.test($('matchStatus').textContent)) setStatus('没有原文字：大小和位置按旧字的外框估算。填上原文字可比对出字体。');
@@ -1215,8 +1240,8 @@ for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => {
   else st.trAdj = (Math.round((st.trEm + st.trAdj) * 200 + d) / 200) - st.trEm;
   refresh();
 };
-$('inColor').oninput = e => { const c = hexRgb(e.target.value); if (S.edit && c) { S.edit.st.color = c; refresh(); } };
-$('inHex').oninput = e => { const c = hexRgb(e.target.value); if (S.edit && c) { S.edit.st.color = c; refresh(); } };
+$('inColor').oninput = e => { const c = hexRgb(e.target.value); if (S.edit && c) { S.edit.st.color = c; S.edit.userColor = true; refresh(); } };
+$('inHex').oninput = e => { const c = hexRgb(e.target.value); if (S.edit && c) { S.edit.st.color = c; S.edit.userColor = true; refresh(); } };
 for (const b of document.querySelectorAll('[data-align]')) b.onclick = () => { if (S.edit) { S.edit.st.align = b.dataset.align; S.edit.st.alignUser = true; refresh(); } };
 for (const b of document.querySelectorAll('[data-nx]')) b.onclick = () => { if (S.edit) { S.edit.st.dx += +b.dataset.nx * 0.5; S.edit.st.dy += +b.dataset.ny * 0.5; refresh(); } };
 $('rngBlur').oninput = e => { if (S.edit) { S.edit.st.blur = +e.target.value; refresh(); } };

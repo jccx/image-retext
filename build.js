@@ -4,7 +4,7 @@
 // Fonts for docs/ are prepared by build_site.js (run it once, or after font changes).
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const rd = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-const FINE_PAGES = '双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片只在你的设备上处理，不会上传。原文字由页面自带的识别读出：常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。也可以打开 PDF：一页一页地改，原文字直接取自 PDF，保存时写回 PDF，其它内容不变。';
+const FINE_PAGES = '双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片只在你的设备上处理，不会上传。原文字由页面自带的识别读出：常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。也可以打开 PDF：一页一页地改，原文字直接取自 PDF，保存时新文字作为真正的文字写回 PDF，其它内容不变；同一个词要改多处时，用上面的“查找”逐处改，不会漏。';
 function build(target) {
   const pages = target === 'pages';
   let html = rd('index.html');
@@ -18,7 +18,7 @@ function build(target) {
       .replace('<!--__PWA_HEAD__-->', ['<meta name="description" content="框住图片里的文字，换成新文字，字体、颜色、位置保持一致。在设备上处理，可离线使用。">',
         '<meta name="theme-color" content="#c2006a">', '<link rel="manifest" href="manifest.webmanifest">', '<link rel="icon" href="icons/icon-192.png">',
         '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">', '<meta name="apple-mobile-web-app-capable" content="yes">',
-        '<meta name="mobile-web-app-capable" content="yes">', '<meta name="apple-mobile-web-app-title" content="图片改字">',
+        '<meta name="mobile-web-app-capable" content="yes">', '<meta name="apple-mobile-web-app-title" content="查缺补漏">',
         '<meta name="apple-mobile-web-app-status-bar-style" content="default">'].join('\n'));
     html = html.replace(/(<p class="fine">)[^<]*(<\/p>)/, (m, a, b) => a + FINE_PAGES + b);
   } else {
@@ -37,7 +37,7 @@ function build(target) {
       ...PDF_CORE];
     fs.writeFileSync(path.join(out, 'sw.js'), rd('sw.js').replace('__VERSION__', ver).replace('__SHELL__', JSON.stringify(shell)));
     fs.writeFileSync(path.join(out, 'manifest.webmanifest'), JSON.stringify({
-      name: '图片改字', short_name: '图片改字', description: '框住图片里的文字，换成新文字，字体、颜色、位置保持一致。',
+      name: '查缺补漏', short_name: '查缺补漏', description: '框住图片或 PDF 里的文字，换成新文字，字体、颜色、位置保持一致。',
       lang: 'zh-CN', start_url: './', scope: './', display: 'standalone', orientation: 'any',
       background_color: '#f3f4f6', theme_color: '#c2006a',
       icons: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -47,7 +47,7 @@ function build(target) {
     console.log('docs/index.html', (html.length / 1024).toFixed(1) + ' KB, version', ver);
   } else console.log('dist/index.html', (html.length / 1024).toFixed(1) + ' KB');
 }
-/* PDF support: pdf.js (Apache-2.0) and pdf-lib (MIT), copied from node_modules so the site asks no other host for them.
+/* PDF support: pdf.js (Apache-2.0), pdf-lib (MIT) and fontkit (MIT), copied from node_modules so the site asks no other host for them.
    The two pdf.js modules get a .js name so that every static host serves them as scripts. */
 function copyPdfLibs(out) {
   const NM = path.join(__dirname, 'node_modules'), pj = path.join(NM, 'pdfjs-dist'), dst = path.join(out, 'pdf');
@@ -59,16 +59,19 @@ function copyPdfLibs(out) {
   cp(path.join(pj, 'LICENSE'), 'LICENSE-pdfjs.txt');
   cp(path.join(NM, 'pdf-lib/dist/pdf-lib.min.js'), 'pdf-lib.min.js');
   cp(path.join(NM, 'pdf-lib/LICENSE.md'), 'LICENSE-pdf-lib.md');
+  cp(path.join(NM, '@pdf-lib/fontkit/dist/fontkit.umd.min.js'), 'fontkit.umd.min.js');
   for (const d of ['cmaps', 'standard_fonts', 'iccs']) for (const f of fs.readdirSync(path.join(pj, d))) cp(path.join(pj, d, f), d + '/' + f);
   /* image decoders for scans (JBIG2, JPEG 2000) and colour profiles; the script sandbox is not needed */
   for (const f of fs.readdirSync(path.join(pj, 'wasm'))) if (!/quickjs/i.test(f)) cp(path.join(pj, 'wasm', f), 'wasm/' + f);
-  const ver = JSON.parse(fs.readFileSync(path.join(pj, 'package.json'), 'utf8')).version, ver2 = JSON.parse(fs.readFileSync(path.join(NM, 'pdf-lib/package.json'), 'utf8')).version;
+  const ver = JSON.parse(fs.readFileSync(path.join(pj, 'package.json'), 'utf8')).version, ver2 = JSON.parse(fs.readFileSync(path.join(NM, 'pdf-lib/package.json'), 'utf8')).version,
+    ver3 = JSON.parse(fs.readFileSync(path.join(NM, '@pdf-lib/fontkit/package.json'), 'utf8')).version;
   fs.writeFileSync(path.join(dst, 'README.txt'), 'Third-party libraries used for PDF support, unmodified apart from the file names of the two pdf.js modules.\n' +
     'pdf.js ' + ver + ' (pdfjs-dist, legacy build) - Mozilla, Apache License 2.0 - https://github.com/mozilla/pdf.js\n' +
-    'pdf-lib ' + ver2 + ' - Andrew Dillon, MIT License - https://github.com/Hopding/pdf-lib\n');
+    'pdf-lib ' + ver2 + ' - Andrew Dillon, MIT License - https://github.com/Hopding/pdf-lib\n' +
+    'fontkit ' + ver3 + ' (@pdf-lib/fontkit, a fork of fontkit by Devon Govett) - MIT License - https://github.com/Hopding/fontkit\n');
 }
-/* the PDF helper files (character maps, standard fonts, image decoders) as one more offline pack; the three scripts are kept with the app itself */
-const PDF_CORE = ['pdf/pdf.min.js', 'pdf/pdf.worker.min.js', 'pdf/pdf-lib.min.js'];
+/* the PDF helper files (character maps, standard fonts, image decoders) as one more offline pack; the four scripts are kept with the app itself */
+const PDF_CORE = ['pdf/pdf.min.js', 'pdf/pdf.worker.min.js', 'pdf/pdf-lib.min.js', 'pdf/fontkit.umd.min.js'];
 function pdfPack() {
   const pj = path.join(__dirname, 'node_modules', 'pdfjs-dist'), files = [];
   let bytes = 0;

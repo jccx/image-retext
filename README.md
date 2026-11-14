@@ -1,10 +1,10 @@
-# Text Overwrite · 图片改字
+# Text Overwrite · 查缺补漏
 
-Replace text inside an image while keeping it looking the same: the new text gets the original font, weight, size, letter spacing, colour and position, and the background under the old text is filled back in. Chinese, English and mixed text.
+Replace text inside an image or a PDF while keeping it looking the same: the new text gets the original font, weight, size, letter spacing, colour and position, and the background under the old text is filled back in. Chinese, English and mixed text.
 
 **Use it:** https://jccx.github.io/text-overwrite/ — on iPhone, open it in Safari, then Share → *Add to Home Screen* to use it like an app.
 
-框住图片里的一段文字，换成新文字：字体、字重、字号、字距、颜色和位置与原文字一致，旧字底下的背景会补回来。支持中文、英文和中英混排。
+框住图片或 PDF 里的一段文字，换成新文字：字体、字重、字号、字距、颜色和位置与原文字一致，旧字底下的背景会补回来。PDF 里的新文字是真正的文字，同一个词有多处时可以用“查找”逐处改，不会漏。支持中文、英文和中英混排。
 
 ## How it works
 
@@ -21,14 +21,17 @@ Open a PDF the same way as an image (**打开图片 / PDF**). Each page is drawn
 
 - **The original text comes from the PDF itself**, exactly, wherever the file carries text. Scans and text inside form fields or notes are read from the picture by the built-in reader instead.
 - **The file's own fonts are used for the new text** whenever they contain every character it needs. The result then matches the old text exactly. Fonts inside a PDF are usually cut down to the characters the document uses, so when a character is missing (the app says which), the closest font from the library draws the whole new text instead; the font names in the PDF guide that choice.
-- **The replaced text is taken out of the file**, not just covered: the glyphs under each edit are removed from the page's content, so searching or copying no longer finds them. The saved file is read back to confirm this, and the save dialog reports the outcome. The new text is laid over the page as a picture at about 216 dpi; it cannot be selected or searched.
-- **整页转成图片** turns every edited page into a picture. Use it when the dialog reports text that could only be covered (text inside reusable page elements), or to leave no trace of a page's original text.
+- **The replaced text is taken out of the file**, not just covered: the glyphs under each edit are removed from the page's content, so searching or copying no longer finds them.
+- **The new text goes into the file as text.** It is written with the file's own font when that font drew it on screen, or with the library font, which is cut down to the characters used and put into the file. It can be selected, searched and copied, stays sharp at any zoom, and keeps the colour (and colour space) of the text it replaces.
+- **The saved file is checked before it is handed over.** The page is drawn again from the saved file and compared with what the app showed: every character has to be where it belongs and look the same. An edit that cannot be written as text, or does not come out the same, is laid over the page as a small picture (about 216 dpi) instead, and the save dialog says how many and why. That happens for text in a scan or picture, for a device font (it cannot be copied into a file — the app prefers a library font that fits nearly as well), and for text inside reusable page elements.
+- **查找 (find)** lists every place a text occurs in the whole file and steps through them: each occurrence is selected for editing, the replacement typed for the first one is offered for the rest, and the count of occurrences not yet edited stays on screen and is repeated in the save dialog. It finds text the PDF carries (not text in scans), ignoring case and spacing; a phrase broken across two lines is not found.
+- **整页转成图片** turns every edited page into a picture. Use it when the dialog reports text that could only be covered, or to leave no trace of a page's original text.
 - A form field or note that an edit touches is merged into the page, since PDF readers draw those on top of the page content.
 - Password-protected files that restrict changes cannot be rewritten in place: they are saved as a new file with every page as a picture (up to 40 pages).
 
-Limits: horizontal text only; pages in CMYK may show a slight colour difference at the edit; a file that does not carry its fonts looks different in every reader, and so can the edit beside its neighbours; digital signatures stop being valid once a file is changed.
+Limits: horizontal text only; a file that does not carry its fonts looks different in every reader, and so does new text written in such a font; text that needs joining or reordering (Arabic, Indic scripts) is saved as a picture; digital signatures stop being valid once a file is changed.
 
-PDF support uses [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) to draw pages and [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) to write files. Both are served from this site (`docs/pdf/`), load only when a PDF is opened, and work offline.
+PDF support uses [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) to draw pages, [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) to write files and [fontkit](https://github.com/Hopding/fontkit) (MIT) to cut fonts down. All are served from this site (`docs/pdf/`), load only when needed, and work offline.
 
 ## Offline use
 
@@ -64,6 +67,7 @@ python3 test/pdf/make_samples.py && node test/pdf/make_chrome.js
 node test/pdf/t_strip.mjs      # glyph positions and removal from the content stream, without a browser
 node test/t_pdf.js             # open → read → match → replace → save on PDFs from seven producers
 node test/t_pdf_special.js     # scans, protected files, passwords, form fields, whole-page pictures
+node test/t_pdf_find.js        # find a text on every page, replace each occurrence, nothing missed
 ```
 
 Set `CHROME=/path/to/chrome` to run the browser tests with a system browser.
@@ -72,4 +76,4 @@ Set `CHROME=/path/to/chrome` to run the browser tests with a system browser.
 
 ## Licences
 
-The app is under the GNU AGPL v3 (see `LICENSE`). `docs/pdf/` holds pdf.js (Apache-2.0) and pdf-lib (MIT), unmodified, with their licence files. The fonts in `docs/fonts/` are open-source fonts redistributed from [Fontsource](https://fontsource.org) under their own licences (SIL Open Font License 1.1 or Apache 2.0); each family's licence is in its folder.
+The app is under the GNU AGPL v3 (see `LICENSE`). `docs/pdf/` holds pdf.js (Apache-2.0), pdf-lib (MIT) and fontkit (MIT), unmodified, with their licence files or notices. The fonts in `docs/fonts/` are open-source fonts redistributed from [Fontsource](https://fontsource.org) under their own licences (SIL Open Font License 1.1 or Apache 2.0); each family's licence is in its folder.

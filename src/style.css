@@ -262,3 +262,11 @@ input[type="range"] { accent-color: var(--accent); min-width: 0; }
 .opt-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
 .opt-row[hidden] { display: none; }
 .opt-row input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--accent); }
+
+/* find in a PDF */
+.find { display: grid; gap: 8px; margin: 0 0 14px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--card); }
+.find-in { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.find-in input { min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; }
+.find-info { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.find-info b { color: var(--ink); font-weight: 600; }
+.find-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

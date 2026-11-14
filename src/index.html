@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!--__PWA_HEAD__-->
-<title>图片改字</title>
+<title>查缺补漏</title>
 <link rel="stylesheet" href="/*__UIFONT__*/">
 <style>
 /*__CSS__*/
@@ -13,7 +13,7 @@
 <body>
 <div id="app">
   <header class="bar">
-    <h1 class="mark" aria-label="图片改字">图片改<span class="mark-sel">字</span></h1>
+    <h1 class="mark" aria-label="查缺补漏">查缺补<span class="mark-sel">漏</span></h1>
     <div class="bar-actions">
       <button type="button" id="btnOpen" class="btn">打开图片</button>
       <button type="button" id="btnUndo" class="btn" disabled>撤销</button>
@@ -44,6 +44,11 @@
 
   <aside id="panel" class="panel">
     <section id="pIdle" class="idle">
+      <div id="findBox" class="find" hidden>
+        <div class="find-in"><input id="findIn" type="search" enterkeyhint="search" placeholder="查找这份 PDF 里的文字" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="查找这份 PDF 里的文字"><button type="button" id="findGo" class="btn">查找</button></div>
+        <p id="findInfo" class="find-info" hidden></p>
+        <div id="findNav" class="find-nav" hidden><button type="button" id="findPrev" class="btn">上一处</button><button type="button" id="findNext" class="btn primary">下一处</button></div>
+      </div>
       <ol class="steps">
         <li><b>框住要改的字</b><span>在图片上拖出一个框，只包住文字和它的底色。一次框一种样式。</span></li>
         <li><b>核对原文字</b><span>中文、英文、中英混排都可以。用它比对出字体、字重、字号、字距和颜色。</span></li>

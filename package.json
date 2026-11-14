@@ -7,9 +7,10 @@
   "scripts": {
     "fonts": "node build_site.js",
     "build": "node build.js",
-    "test:pdf": "node test/pdf/t_strip.mjs && node test/t_pdf.js && node test/t_pdf_special.js"
+    "test:pdf": "node test/pdf/t_strip.mjs && node test/t_pdf.js && node test/t_pdf_special.js && node test/t_pdf_find.js"
   },
   "devDependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "@fontsource/abel": "^5.3.0",
     "@fontsource/abril-fatface": "^5.3.0",
     "@fontsource/albert-sans": "^5.3.0",

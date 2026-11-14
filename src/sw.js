@@ -1,4 +1,4 @@
-/* 图片改字 service worker.
+/* 查缺补漏 service worker.
    - The app itself (page, icons, manifest) is kept on the device, so it opens without a network.
    - Fonts: answered from the downloaded packs (Cache Storage "overwrite-fonts") when present, otherwise from the network.
    - A new version is fetched in the background and used from the next launch.

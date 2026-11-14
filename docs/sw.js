@@ -1,11 +1,11 @@
-/* 图片改字 service worker.
+/* 查缺补漏 service worker.
    - The app itself (page, icons, manifest) is kept on the device, so it opens without a network.
    - Fonts: answered from the downloaded packs (Cache Storage "overwrite-fonts") when present, otherwise from the network.
    - A new version is fetched in the background and used from the next launch.
    - What the app stored under its former name (retext-…) is removed: those copies belong to the old address. */
-const VERSION = '58a7a7ad58';
+const VERSION = 'dc906bd3cf';
 const SHELL = 'overwrite-shell-' + VERSION, FONTS = 'overwrite-fonts';
-const SHELL_FILES = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","fonts/packs.json","fonts/ibm-plex-mono/ibm-plex-mono.css","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2","pdf/pdf.min.js","pdf/pdf.worker.min.js","pdf/pdf-lib.min.js"];
+const SHELL_FILES = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","fonts/packs.json","fonts/ibm-plex-mono/ibm-plex-mono.css","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2","pdf/pdf.min.js","pdf/pdf.worker.min.js","pdf/pdf-lib.min.js","pdf/fontkit.umd.min.js"];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });

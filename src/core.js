@@ -514,9 +514,10 @@ function mctx(w, h) {
   return _mc.ctx;
 }
 
-function drawRun(ctx, text, ox, oy, tr, stroke) {
+/* each: place every character on its own even without letter spacing (a PDF sets text that way, so new text for a PDF is drawn that way too) */
+function drawRun(ctx, text, ox, oy, tr, stroke, each) {
   const cps = Array.from(text);
-  if (Math.abs(tr) < 0.01 || cps.length < 2 || COMPLEX_RE.test(text)) {
+  if ((!each && Math.abs(tr) < 0.01) || cps.length < 2 || COMPLEX_RE.test(text)) {
     if (stroke) ctx.strokeText(text, ox, oy); else ctx.fillText(text, ox, oy);
     return;
   }
@@ -932,7 +933,7 @@ function lineMetrics(st, text, px) {
 }
 
 /* text coverage (0..1) on a w×h canvas; lines: [{text, ox, oy}] */
-function textCoverage(st, lines, px, trPx, w, h, lineWidth) {
+function textCoverage(st, lines, px, trPx, w, h, lineWidth, each) {
   const ctx = mctx(w, h);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
@@ -944,8 +945,8 @@ function textCoverage(st, lines, px, trPx, w, h, lineWidth) {
   for (const ln of lines) {
     if (!ln.text) continue;
     const t = encT(st.fam, ln.text);
-    if (lineWidth) drawRun(ctx, t, ln.ox, ln.oy, trPx, true);
-    drawRun(ctx, t, ln.ox, ln.oy, trPx, false);
+    if (lineWidth) drawRun(ctx, t, ln.ox, ln.oy, trPx, true, each);
+    drawRun(ctx, t, ln.ox, ln.oy, trPx, false, each);
   }
   const d = ctx.getImageData(0, 0, w, h).data;
   const out = new Float32Array(w * h);
