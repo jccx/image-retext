@@ -1,13 +1,29 @@
 /* =====================================================================
-   ocr.js — a small text reader written for this page; it runs on the device.
-   It is the fallback for pages where the viewer's Claude is not available (a shared link in a plain browser).
+   reader/ — a small text reader written for this page; it runs on the device.
+   It reads the original text of a selection wherever the viewer's Claude is not available (a shared link in a plain
+   browser, the installable build), and the lines of whole pictures and scans for the find box.
    · Chinese: each character in the picture is compared with characters drawn in the device's own fonts
      (the 6,763 GB 2312 characters). Reliable on ordinary printed faces (黑体, 宋体), not on brush or display faces.
    · Latin letters, digits, punctuation: a small classifier (latin.gen.js) trained for this page on glyphs
      drawn from open-source fonts.
+   The files, in the order the work goes:
+     models.js    the two models, made ready on first use (ocrLoad), and the picture every glyph is reduced to (ocrNorm)
+     classify.js  one box of ink → the nearest Chinese characters (ocrCJK, ocrFine) or the Latin character (ocrNet)
+     line.js      one line → pieces of ink → glyphs → characters → text with its spaces (ocrReadBand, ocrCompose)
+     variants.js  spellings the reader cannot tell apart; the font fit picks among them
+     read.js      a whole selection (ocrReadLines), a whole picture (ocrFindLines, ocrPage)
+
+   reader/models.js — OCR, the reader's state:
+     p: the promise of ocrLoad() once it has been started · failed, err: it could not start, and why
+     progress: the function that is told how far loading is
+     net: the Latin classifier → { cls: the classes · iC, iJ: the classes “a Chinese character” and “not one glyph” · layers · … }
+     bank: the Chinese templates → { n · ch[]: the characters · F: 24×24 coverage of each · C: an 8×8 copy for a first, quick comparison
+           nF, nC: their norms · lasp: log(width / height) · rare: 1 for the less common half · pl: which font drew it · fonts }
    ===================================================================== */
 const OCR = { p: null, failed: false, err: '', bank: null, net: null, progress: null };
+/* a glyph is reduced to OCR_N × OCR_N numbers (OCR_NN of them) plus OCR_GEO numbers about its shape and place in the line (ocrFeat) */
 const OCR_N = 24, OCR_NN = 576, OCR_GEO = 5;
+/* Chinese punctuation that is drawn as templates along with the characters */
 const OCR_CJKP = '。、《》【】「」～';
 
 /* box → N×N coverage (area-averaged, lightly blurred), written into F at off; returns its norm.
@@ -43,8 +59,12 @@ function ocrNorm(get, x0, y0, w, h, F, off, C, coff, N) {
   return Math.sqrt(n2) || 1;
 }
 
+/* base64 → bytes */
 function ocrB64(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
 
+/* Make the reader ready (once; later calls get the same promise): unpack the Latin classifier, and draw the Chinese templates
+   in the fonts of this device. onProgress(text) is told how far it is.
+   → promise of true, or of false when it could not be done (OCR.failed, OCR.err). */
 function ocrLoad(onProgress) {
   if (onProgress) OCR.progress = onProgress;
   if (OCR.p) return OCR.p;

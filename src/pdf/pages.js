@@ -1,3 +1,22 @@
+/* =====================================================================
+   pdf/pages.js — the open PDF: opening it, drawing a page as the picture that is edited, going from page to page.
+
+   S.pdf, the open document (null while a plain picture is open):
+     name: the file name without .pdf · bytes: the file as it was opened · pw: its password, if it has one
+     doc, lib: the pdf.js document and module · n: number of pages · cur: the page on screen (1…n; 0 until the first is shown)
+     busy: a page is being opened
+     pages: Map page number → pg, for every page that has been on screen:
+       { edits: the edits made on it · vp: the pdf.js viewport it was drawn with · map: its glyph map (core.js)
+         annots: its notes and form fields [{ id, subtype, x, y, w, h }] · w, h: the size of its picture }
+     fonts: Map pdf.js font id → the family record made for that font (fonts.js)
+     and the fields of everything that can be searched (findNew in app/find.js): isPic, lines, imgs, find, ocr
+
+   One page at a time is the picture being edited (S.img), and the edits made on it are the undo list (S.undo).
+   When the page is left they are kept in pg.edits (pdfStash) as
+     { x, y, w, h: where · after: the pixels after the edit · pdf: what saving needs to know (pdfEditInfo in edit.js), or null }
+   and painted on again when the page comes back (pdfApplyEdits).
+   ===================================================================== */
+/* open a file with pdf.js → promise of the document. askPassword(reason, tries) gives a password, or null to give up. */
 function pdfOpenDoc(lib, bytes, askPassword) {
   const task = lib.getDocument({
     data: bytes.slice(), cMapUrl: pdfUrl('cmaps/'), cMapPacked: true, standardFontDataUrl: pdfUrl('standard_fonts/'), wasmUrl: pdfUrl('wasm/'), iccUrl: pdfUrl('iccs/'),
@@ -11,6 +30,7 @@ function pdfOpenDoc(lib, bytes, askPassword) {
   return task.promise;
 }
 
+/* open a PDF the user picked; it takes the place of whatever is open */
 async function openPdf(blob, name) {
   if (BUILD !== 'pages') { toast('这个版本只能打开图片；PDF 请用网页版'); return; }
   $('stageNote').textContent = '正在打开 PDF…';
@@ -37,6 +57,7 @@ function pdfViewport(page) {
   const v1 = page.getViewport({ scale: 1 }), side = Math.max(v1.width, v1.height);
   return page.getViewport({ scale: Math.max(0.5, Math.min(Math.max(3, 1500 / side), Math.sqrt(9e6 / (v1.width * v1.height)), 4096 / side)) });
 }
+/* draw a page → a canvas of the viewport's size, white where the page is empty */
 async function pdfDrawPage(page, vp) {
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.round(vp.width)); c.height = Math.max(1, Math.round(vp.height));
@@ -46,7 +67,7 @@ async function pdfDrawPage(page, vp) {
   x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; x.filter = 'none';
   return c;
 }
-/* draw one page → { c, x, vp, map, annots } */
+/* draw one page and read where its glyphs, pictures, notes and form fields are → { c: canvas, x: its context, vp, map, annots } */
 async function pdfRender(no) {
   const P = S.pdf, lib = P.lib, page = await P.doc.getPage(no), vp = pdfViewport(page);
   const c = await pdfDrawPage(page, vp), x = c.getContext('2d', { willReadFrequently: true });
@@ -86,12 +107,14 @@ function pdfStash() {
   const pg = P.pages.get(P.cur);
   if (pg) pg.edits = S.undo.map(u => ({ x: u.x, y: u.y, w: u.after.width, h: u.after.height, after: u.after, pdf: u.pdf || null }));
 }
+/* paint edits onto a page picture. undo: the list that receives what was there before (to make them undoable), or null */
 function pdfApplyEdits(x, edits, undo) {
   for (const e of edits) {
     if (undo) undo.push({ x: e.x, y: e.y, data: x.getImageData(e.x, e.y, e.w, e.h), after: e.after, pdf: e.pdf || null });
     x.putImageData(e.after, e.x, e.y);
   }
 }
+/* show page `no`: the edits of the page being left are kept, those of the page shown are painted back on */
 async function pdfGo(no) {
   const P = S.pdf;
   if (!P || P.busy) return;
@@ -114,6 +137,7 @@ async function pdfGo(no) {
   } catch (e) { toast('第 ' + no + ' 页没能显示出来'); }
   finally { P.busy = false; pdfPager(); if ($('stageNote').textContent.startsWith('正在打开')) $('stageNote').textContent = ''; }
 }
+/* the page number between its two arrows */
 function pdfPager() {
   const P = S.pdf, el = $('pager');
   el.hidden = !P;
@@ -122,6 +146,7 @@ function pdfPager() {
   $('pgNum').textContent = P.cur + ' / ' + P.n;
   $('pgPrev').disabled = P.cur <= 1; $('pgNext').disabled = P.cur >= P.n;
 }
+/* a plain picture takes the place of the PDF */
 function pdfClose() {
   if (S.pdf) pdfDestroy(S.pdf.doc);
   pdfDropFonts();

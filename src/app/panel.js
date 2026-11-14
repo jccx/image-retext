@@ -1,5 +1,10 @@
+/* =====================================================================
+   app/panel.js — the editing panel. It shows the open edit: its font, size and colour, how well the font fits,
+   and the fonts that fit. Every change to an edit ends in refresh(), which also repaints the preview in the picture.
+   ===================================================================== */
+/* the line under the text boxes that says what is going on. warn: it is something the user should look at */
 function setStatus(t, warn) { const el = $('matchStatus'); el.textContent = t || ''; el.classList.toggle('warn', !!warn); }
-/* ---------- panel rendering ---------- */
+/* the open edit has changed: repaint its preview in the picture, and show its values in the panel */
 function refresh() {
   const ed = S.edit;
   if (!ed) return;
@@ -46,6 +51,7 @@ function refresh() {
   $('btnOcr').hidden = false;
   for (const ch of $('cands').children) ch.setAttribute('aria-pressed', ch.dataset.fam === st.fam.n ? 'true' : 'false');
 }
+/* the row of fonts that fit; tapping one uses it */
 function renderCands() {
   const ed = S.edit, box = $('cands');
   box.textContent = '';
@@ -65,6 +71,7 @@ function renderCands() {
     box.appendChild(b);
   }
 }
+/* the list of all fonts, in groups. It is built again whenever fonts are added (an uploaded file, the fonts of a PDF). */
 function buildFamilySelect() {
   const sf = $('selFamily');
   sf.textContent = '';
@@ -81,4 +88,5 @@ function buildFamilySelect() {
     sf.appendChild(og);
   }
 }
+/* a text box is as tall as its text, up to four lines */
 function autoRows(t) { t.rows = clamp(t.value.split('\n').length, 1, 4); }

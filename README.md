@@ -70,11 +70,16 @@ node test/t_pdf.js             # open → read → match → replace → save on
 node test/t_pdf_special.js     # scans, protected files, passwords, form fields, whole-page pictures
 node test/t_pdf_find.js        # find a text on every page, replace each occurrence, nothing missed
 node test/t_find_ocr.js        # text in scans and pictures: read once, then found
+npm run check          # the source files share one scope: finds clashing or missing names, and files that reach into the wrong layer
 ```
 
 Set `CHROME=/path/to/chrome` to run the browser tests with a system browser.
 
 `test/` also holds the font-matching, layout and reading tests; `train/train_latin.py` retrains the Latin classifier from samples made by `test/gen_*.js`.
+
+## Source
+
+The code is in `src/`, in small files by responsibility: `image/` (pixels and type), `reader/` (the built-in text reader), `pdf/` (PDF support) and `app/` (the page). `build.js` joins them into the one inline script of the page. [`ARCHITECTURE.md`](ARCHITECTURE.md) describes the files, the layers, how an edit runs, and what is easy to get wrong; every file begins with a comment on what it is for and the data it owns.
 
 ## Licences
 

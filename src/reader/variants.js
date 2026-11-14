@@ -1,12 +1,16 @@
+/* =====================================================================
+   reader/variants.js — spellings the reader cannot tell apart by shape alone.
+   The font fit (app/match.js) draws them over the picture and keeps the one that fits best.
+   ===================================================================== */
 /* full-width and half-width forms look alike to the reader; the font fit tells them apart */
 const WIDTH_PAIRS = [['￥', '¥'], ['：', ':'], ['，', ','], ['；', ';'], ['！', '!'], ['？', '?'], ['（', '('], ['）', ')'], ['％', '%']];
+/* the text with these all half-width, and (in Chinese text) all full-width */
 function widthVariants(t) {
   let half = t, full = t;
   for (const [f, h] of WIDTH_PAIRS) { half = half.split(f).join(h); if (/[㐀-鿿]/.test(t)) full = full.split(h).join(f); }
   return [...new Set([half, full])].filter(v => v !== t);
 }
-/* other spellings of a line worth trying against the picture: width forms, and a space at each doubtful gap */
-/* characters the reader cannot tell apart by shape alone; the font fit picks among them, position by position */
+/* characters the reader cannot tell apart by shape alone; the font fit picks among them, position by position → [{ i, alts }] */
 const ALIKE = [['—', '–', '-', '－', '一'], ['￥', '¥'], ['·', '•', '・']];
 function alikeSlots(t) {
   const out = [];
@@ -14,6 +18,8 @@ function alikeSlots(t) {
   Array.from(t).forEach((ch, i) => { const g = ALIKE.find(a => a.includes(ch)); if (g && out.length < 4) { const alts = g.filter(x => x !== ch && (zh || !/[－一￥・]/.test(x))); if (alts.length) out.push({ i, alts }); } });
   return out;
 }
+/* Other spellings of a line worth trying against the picture: width forms, and a space at each doubtful gap (maybe).
+   → [{ t, margin: how much better than the original it has to fit to be taken }] */
 function textVariants(t, maybe) {
   const out = widthVariants(t).map(v => ({ t: v, margin: 0.012 }));
   const ins = (str, idxs) => { let o = str; for (const k of idxs.slice().sort((p, q) => q - p)) o = o.slice(0, k) + ' ' + o.slice(k); return o; };

@@ -1,5 +1,9 @@
-/* ---------- view ---------- */
+/* =====================================================================
+   app/view.js — showing the picture: drawing it at the current zoom and position (S.view), fitting, zooming,
+   and converting between points of the stage and pixels of the picture.
+   ===================================================================== */
 let drawQueued = false;
+/* ask for the stage to be drawn again, once, before the next frame */
 function requestDraw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(() => { drawQueued = false; draw(); }); } }
 function draw() {
   const { s, tx, ty } = S.view;
@@ -14,6 +18,7 @@ function draw() {
   }
   placeSel();
 }
+/* put the selection frame where the box being drawn, or the box of the open edit, is on screen */
 function placeSel() {
   const r = S.drag && S.drag.rect ? S.drag.rect : S.edit ? S.edit.userRect : null;
   if (!r) { selEl.hidden = true; return; }
@@ -23,6 +28,7 @@ function placeSel() {
   selEl.style.width = Math.max(1, r.w * s) + 'px';
   selEl.style.height = Math.max(1, r.h * s) + 'px';
 }
+/* the stage has changed size (rotation, a panel opening): keep the fit, or keep the middle where it was */
 function resizeView() {
   const r = stage.getBoundingClientRect();
   if (r.width < 2 || r.height < 2) return;
@@ -34,6 +40,7 @@ function resizeView() {
   if (first || S.fitted) fitView(); else { S.view.tx += S.vw / 2 - cx; S.view.ty += S.vh / 2 - cy; }
   requestDraw();
 }
+/* the zoom at which the whole picture fits, with a margin */
 function fitScale() { return Math.min((S.vw - 28) / S.iw, (S.vh - 28) / S.ih); }
 function fitView() {
   if (!S.img || !S.vw) return;
@@ -42,6 +49,7 @@ function fitView() {
   S.fitted = true;
   requestDraw();
 }
+/* zoom by the factor f, keeping the point (px, py) of the stage where it is */
 function zoomAt(px, py, f) {
   const v = S.view;
   const ns = clamp(v.s * f, Math.min(0.05, fitScale() * 0.5), 24);
@@ -59,5 +67,6 @@ function showRect(r) {
   S.fitted = false;
   requestDraw();
 }
+/* a point of the stage → the pixel of the picture shown there; a pointer event → its point on the stage */
 const toImg = (px, py) => ({ x: (px - S.view.tx) / S.view.s, y: (py - S.view.ty) / S.view.s });
 function stagePt(e) { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }

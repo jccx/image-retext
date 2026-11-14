@@ -1,15 +1,25 @@
-/* ---------- offline fonts (installable build only) ----------
-   在线: fonts come from this site as needed. 离线: whole packs are kept on the device (Cache Storage) and the
-   service worker answers from there, so matching works with no network. Switching back to 在线 deletes them. */
+/* =====================================================================
+   app/offline.js — what only the installable build has: fonts kept on the device, the privacy note, the service worker.
+   在线: fonts come from this site as they are needed. 离线: whole packs are kept on the device (Cache Storage) and the
+   service worker (src/sw.js) answers from there, so matching works with no network. Switching back to 在线 deletes them.
+   The packs are listed in FONT_PACKS (selffonts.gen.js; the PDF helper files are one more pack, added by build.js);
+   which files a pack has is in docs/fonts/packs.json.
+   What is remembered on the device (localStorage, offKey): { mode: 'online' | 'offline', packs: { pack: 'part' | 'done' } }
+   ===================================================================== */
+/* cache: the name of the Cache Storage the packs are kept in (the service worker uses the same name)
+   busy: the download that is running → { k: pack, frac: how far, stop: { v } }, or null · sel: the packs ticked for download */
 const OFF = { cache: 'overwrite-fonts', busy: null, sel: { latin: true, sc: true, cjk: false, pdf: true } };
 const offKey = 'overwrite.offline';
+/* what is remembered on the device, read and written */
 function offState() { try { return JSON.parse(localStorage.getItem(offKey)) || { mode: 'online', packs: {} }; } catch (e) { return { mode: 'online', packs: {} }; } }
 function offSave(st) { try { localStorage.setItem(offKey, JSON.stringify(st)); } catch (e) { /* private mode: state lives for this visit only */ } }
+/* the few words on the button: 在线加载, or which packs are on the device */
 function offLabel() {
   const st = offState(), have = Object.keys(FONT_PACKS).filter(k => st.packs[k] === 'done');
   if (st.mode !== 'offline' || !have.length) return '在线加载';
   return '离线 · ' + have.map(k => FONT_PACKS[k].name.replace('字体', '')).join('、');
 }
+/* how much room the site takes up on the device, as far as the browser tells */
 async function offStore() {
   let t = '';
   try {
@@ -20,6 +30,7 @@ async function offStore() {
   } catch (e) { t = ''; }
   $('offStore').textContent = t;
 }
+/* draw the sheet: the two modes, the packs with their state, the download button */
 function offRender() {
   const st = offState(), off = st.mode === 'offline';
   $('modeOnline').setAttribute('aria-checked', String(!off)); $('modeOffline').setAttribute('aria-checked', String(off));
@@ -48,6 +59,7 @@ function offRender() {
   $('offlineState').textContent = offLabel();
   offStore();
 }
+/* fetch the ticked packs into the cache, eight files at a time. A pack that was interrupted carries on where it stopped. */
 async function offDownload() {
   const st = offState(), todo = Object.keys(FONT_PACKS).filter(k => OFF.sel[k] && st.packs[k] !== 'done');
   if (!todo.length || !('caches' in window)) { if (!('caches' in window)) toast('这个浏览器不支持离线保存'); return; }
@@ -83,6 +95,7 @@ async function offDownload() {
   OFF.busy = null; offRender();
   if (!stopped && Object.keys(FONT_PACKS).every(k => !OFF.sel[k] || offState().packs[k] === 'done')) toast('字体包已存到本机，可以离线使用了');
 }
+/* delete these packs from the device */
 async function offDelete(keys) {
   const st = offState();
   if (!('caches' in window)) return;
@@ -98,6 +111,7 @@ async function offDelete(keys) {
   for (const k of keys) delete st.packs[k];
   offSave(st); offRender();
 }
+/* wire the sheet and its buttons; nothing of this exists in the artifact */
 function offInit() {
   if (BUILD !== 'pages') return;
   /* the app used to live at another address under another name: what it stored there cannot be used here */

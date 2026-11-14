@@ -1,4 +1,4 @@
-# Trains the small Latin glyph classifier used by src/ocr.js and writes src/latin.gen.js.
+# Trains the small Latin glyph classifier used by src/reader/ (ocrNet in classify.js) and writes src/latin.gen.js.
 # Data: /tmp/latin/part-*.bin made by test/gen_latin.js (glyphs drawn from open-source fonts, run through the page's own pipeline).
 # usage: python3 train/train_latin.py [holdout|final] [epochs] [h1] [h2]
 import numpy as np, json, sys, glob, base64, time, hashlib

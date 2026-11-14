@@ -1,6 +1,9 @@
-/* ---------- keyboard, paste, drop ---------- */
+/* =====================================================================
+   app/shortcuts.js — the keyboard (Esc, Ctrl/⌘+Enter to apply, Ctrl/⌘+Z to undo, space to move the picture),
+   pasting a picture, dropping a file onto the stage.
+   ===================================================================== */
+/* is the user typing in a field? Then keys belong to the field. */
 const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
-/* keys, pasting a picture, dropping a file */
 function shortcutsInit() {
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') { if (!$('privSheet').hidden) $('privClose').click(); else if (!$('offSheet').hidden) $('offClose').click(); else if (!$('sheet').hidden) $('sheetClose').click(); else if (S.edit) dropEdit(); }

@@ -1,19 +1,33 @@
 /* =====================================================================
-   pdfcore.js — the parts of PDF support that do not touch the page (so they can be tested on their own).
+   pdf/core.js — the parts of PDF support that do not touch the page, so that they can be tested on their own:
+   test/pdf/t_strip.mjs runs this one file in Node. It must not use the browser or any other file of the app.
    1. Where every glyph of a PDF page sits, worked out from pdf.js's list of drawing operators
       (the same arithmetic pdf.js uses to draw them). This gives the exact original text of a selection,
       and says which glyphs lie under an edit.
    2. Taking those glyphs out of the page's content stream, so the old text is really gone from the file
       and not only covered. Every other glyph keeps its place: a removed glyph is replaced by a move of
       the same width.
+   3. New text as text-showing operators, and a check that the saved page shows it the way the app drew it.
+
+   The glyph map of a page (pdfGlyphMap), in pixels of the page picture:
+     { shows: [rec] · nTop: how many of them are in the page's own content stream · imgs: [{ x, y, w, h }], the pictures on the page }
+     rec, one text-showing operator →
+       { k: its number among those of the page's own content stream (−1 inside a form XObject) · top: it is one of those
+         i: its place in pdf.js's operator list · font: pdf.js's id of the font · fo: the font object · name · size
+         h: the height of a line of this text in the picture · tc, tw: character and word spacing · tfs: the size with its sign
+         fm0: glyph units → text units · mode: text rendering mode · vertical, type3
+         glyphs: what pdf.js handed over (glyph objects, and numbers for the moves between them) · g: [glyph] }
+     glyph → { j: its index in rec.glyphs · u: its text · sp: it is a space · code: its character code in the file · rec
+               a, b: its pen origin and the end of its advance, on the baseline · c: its middle
+               t, d: the top and the bottom of the line at its middle }
    ===================================================================== */
+/* transforms as PDF writes them, [a b c d e f]: pdfMul(a, b) is b first, then a; pdfPt(m, x, y) is where m takes a point */
 const pdfMul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
 const pdfPt = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 
 /* ol: pdf.js operator list of the page content (annotations off). OPS: pdf.js operator ids.
    getFont(id): the font object pdf.js made. base: viewport transform (PDF units → picture pixels).
-   → { shows: [{ k, top, i, font, name, size, … , g: [glyph] }], nTop }
-   k numbers the text-showing operators of the page's own content stream in order (−1 inside a form XObject). */
+   → the glyph map described at the top of this file. */
 function pdfGlyphMap(ol, OPS, getFont, base) {
   const fn = ol.fnArray, args = ol.argsArray, shows = [], stack = [], imgs = [];
   /* pictures placed on the page (a picture fills the unit square of the space it is painted in): text inside them is not text of the file */
@@ -87,7 +101,8 @@ function pdfGlyphsIn(map, r) {
   return out;
 }
 
-/* the text of a selection, as the PDF has it → { text, bad, fonts, n } ; bad: the PDF's own text is unusable (no proper character table) */
+/* The text of a selection, as the PDF has it → { text, bad, fonts, n, lines }. bad: the PDF's own text is unusable (no proper
+   character table) · fonts: the font names, most used first · n: glyphs · lines: [{ text, g: its glyphs, left to right }] */
 function pdfTextIn(map, r) {
   const gs = pdfGlyphsIn(map, r).filter(g => g.rec.h > 0);
   if (!gs.length) return { text: '', bad: false, fonts: [], n: 0, lines: [] };
@@ -127,6 +142,7 @@ function pdfTextIn(map, r) {
 }
 
 /* ---------- content stream ---------- */
+/* white space and delimiters of PDF syntax; bytes s..e as text */
 const pdfWS = c => c === 0 || c === 9 || c === 10 || c === 12 || c === 13 || c === 32;
 const pdfDelim = c => c === 40 || c === 41 || c === 60 || c === 62 || c === 91 || c === 93 || c === 123 || c === 125 || c === 47 || c === 37;
 const pdfLatin1 = (b, s, e) => { let t = ''; for (let i = s; i < e; i++) t += String.fromCharCode(b[i]); return t; };
@@ -206,6 +222,7 @@ function pdfScanShows(b) {
   return out;
 }
 
+/* the bytes a string token stands for: a literal string with its escapes undone, or a hex string */
 function pdfStrBytes(b, tok) {
   const out = [], end = tok.e - 1;
   if (tok.t === 'hex') {
@@ -242,6 +259,7 @@ function pdfCodeBytes(b, sh, rec) {
   return nG && nB % nG === 0 && nB / nG <= 4 ? nB / nG : 0;
 }
 
+/* a number as PDF writes it: at most four decimals, no trailing zeros */
 const pdfNum = v => { const t = (Math.abs(v) < 1e-6 ? 0 : v).toFixed(4).replace(/\.?0+$/, ''); return t === '-0' ? '0' : t; };
 
 /* one text-showing operator rewritten without the glyphs in rm (indices into pdf.js's glyph list of that operator).
@@ -289,7 +307,8 @@ function pdfRewriteShow(b, sh, rec, rm) {
 }
 
 /* content: the page's own content stream (decoded). jobs: Map k → Set of glyph indices to take out, for the k-th text-showing operator.
-   shows: map.shows. → { bytes, done: [k…], failed: [{ k, why }] } */
+   map: the page's glyph map. → { bytes, done: [k…], failed: [{ k, why }], scan: pdfScanShows(content) } ; bytes is null when
+   the operators in the file and the ones pdf.js drew cannot be matched up. */
 function pdfStrip(content, map, jobs) {
   const scan = pdfScanShows(content), failed = [], done = [];
   if (scan.length !== map.nTop) return { bytes: null, done, scan: null, failed: [...jobs.keys()].map(k => ({ k, why: 'operator count differs (' + scan.length + ' in the file, ' + map.nTop + ' drawn)' })) };

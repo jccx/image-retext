@@ -1,4 +1,12 @@
-/* ---------- layout: where the old text sat, and where the new text goes ---------- */
+/* =====================================================================
+   app/layout.js — where the old text sat, and where the new text goes.
+   computeFit() makes one reference for every line of the old text (ed.fit), in pixels of the region →
+     { x0: the pen origin of the line · oy: its baseline · adv: its whole advance · inkL, inkR: where its ink begins and ends
+       extras: for each gap between words, how much wider or narrower it was than ordinary spacing
+       extraMore: the same for gaps beyond those }
+   layoutNew() sets the new text on these references: same origin, baseline, size and spacing, line for line.
+   ===================================================================== */
+/* a line as its words and what stands between them → { lead: white space in front, words, seps } */
 function splitParts(t) {
   const lead = /^\s*/.exec(t)[0];
   const words = [], seps = [];
@@ -7,6 +15,7 @@ function splitParts(t) {
   while ((m = re.exec(t.slice(lead.length).replace(/\s+$/, '')))) { words.push(m[1]); if (m[2]) seps.push(m[2]); }
   return { lead, words, seps };
 }
+/* the number of characters (not of UTF-16 units) */
 const cps = t => Array.from(t).length;
 /* pen distance from the start of `word` to the start of the next word in ordinary typesetting */
 function natStep(st, word, sep, px, tr) { return lineMetrics(st, word + sep, px).W + tr * (cps(word) + cps(sep)); }
@@ -31,8 +40,11 @@ function lineRef(st, text, xs, words, oy, px, tr, band) {
   ref.adv = xs[xs.length - 1] - xs[0] + lineMetrics(st, last, px).W + tr * (cps(last) - 1);
   return ref;
 }
+/* a line whose word gaps were all ordinary: it can be set in one piece */
 const plainRef = r => !r.extraMore && !r.extras.some(Boolean);
 
+/* Fill ed.fit. With a fitted font every line is placed by its own ink (the fitted line by the fit itself);
+   without one, proxyFit() goes by the outline of the old text. */
 function computeFit(ed) {
   const st = ed.st, fit = [], bands = ed.bands, an = ed.an;
   if (!bands.length) {
@@ -143,7 +155,9 @@ function detectAlign(ed, fit) {
 }
 
 /* New text, line by line: same pen origin (indent), baseline, size and tracking as the line it replaces;
-   the gaps between words reuse what the original had at the same place. Same-length text therefore lands where the old text was. */
+   the gaps between words reuse what the original had at the same place. Same-length text therefore lands where the old text was.
+   → [{ text, ox, oy: pen origin and baseline · m: its metrics · inkR: how far its ink reaches to the right of ox }],
+   one entry for every piece that is drawn on its own: a whole line, or a word. */
 function layoutNew(ed) {
   const st = ed.st;
   const txt = ed.newText.length ? ed.newText : ed.origText;

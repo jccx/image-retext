@@ -1,4 +1,8 @@
-/* every line of an analysed selection → { text, conf, maybe, slots } */
+/* =====================================================================
+   reader/read.js — the reader's two jobs: the text of a selection, and the lines of text in a whole picture.
+   ===================================================================== */
+/* Every line of an analysed selection → { text, conf: how sure on average, maybe, slots } (maybe and slots as ocrCompose gives
+   them, for a single line). When the type is not of a kind this reader knows, text is '' and raw holds its best guess. */
 function ocrReadLines(an, bands) {
   const lines = [], maybe = [], slots = [];
   let sum = 0, cnt = 0, low = 0;
@@ -14,13 +18,12 @@ function ocrReadLines(an, bands) {
   if (conf < OCR_MIN || low > 0.22 * cnt) return { text: '', conf, maybe: [], slots: [], raw: lines.join('\n') };
   return { text: lines.join('\n'), conf, maybe: lines.length === 1 ? maybe[0] : [], slots: lines.length === 1 ? slots[0] : [] };
 }
+/* below this average likeness the reader says nothing rather than guess */
 const OCR_MIN = 0.72;
 
-/* =====================================================================
-   A whole picture: where its lines of text are, and what they say.
-   Used to make text in pictures and scans findable. The lines are found from the edges in a reduced copy of the picture
-   (strokes of type make many short edges close together); every line is then read like a selection.
-   ===================================================================== */
+/* ---------- a whole picture: where its lines of text are, and what they say ----------
+   Used to make text in pictures and scans findable (app/find.js). The lines are found from the edges in a reduced copy
+   of the picture (strokes of type make many short edges close together); every line is then read like a selection. */
 /* ctx: the picture (W×H). areas: rectangles to look in, or null for everywhere. → [{ x, y, w, h }] line boxes, picture pixels */
 function ocrFindLines(ctx, W, H, areas) {
   const k = Math.max(1, Math.round(Math.max(W, H) / 1200)), w = Math.floor(W / k), h = Math.floor(H / k);

@@ -2,6 +2,8 @@
 //   dist/index.html   the Claude artifact (fonts from Google Fonts; Claude reads the original text when available)
 //   docs/             the GitHub Pages / installable version (fonts hosted alongside, offline packs, service worker)
 // Fonts for docs/ are prepared by build_site.js (run it once, or after font changes).
+//   node build.js [artifact | pages]      both when no target is named
+// A new source file has to be added to MODULES below. See ARCHITECTURE.md.
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), vm = require('vm');
 const rd = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
 /* The app's script is these files, one after another, in a single inline script: they share one scope and call each other freely.

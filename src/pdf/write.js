@@ -1,4 +1,16 @@
-/* ---------- writing ---------- */
+/* =====================================================================
+   pdf/write.js — one edit goes into the file. (L is the pdf-lib module; doc and page are its document and page.)
+   · As a picture: the repainted pixels are laid over the page (pdfDrawPatch).
+   · As text: a plan first says which font writes every character, and with which code —
+       the file's own font (pdfOwnPlan): the codes and widths the file already uses, or
+       a library font (pdfLibPlan): the font file that holds each character; it is put into the file, cut down
+       to the characters used —
+     and pdfWriteText then writes the operators, every character where the screen shows it.
+   A plan is { enc: Map character → how to write it }, or { why: the reason it cannot be done (a key of PDF_WHY in save.js) }.
+   ===================================================================== */
+
+/* ---------- pictures, and the content of a page ---------- */
+/* a Blob as bytes; pixels as the bytes of a PNG file */
 const pdfBlobBytes = async blob => new Uint8Array(await blob.arrayBuffer());
 function pdfPng(imageData) {
   const c = document.createElement('canvas');
@@ -44,6 +56,7 @@ function pdfDrawPatch(L, page, vp, img, x, y, w, h) {
   page.pushOperators(L.pushGraphicsState(), L.concatTransformationMatrix(br[0] - bl[0], br[1] - bl[1], tl[0] - bl[0], tl[1] - bl[1], bl[0], bl[1]), L.drawObject(key), L.popGraphicsState());
 }
 
+/* ---------- the new text as text: which font writes it, and with which codes ---------- */
 /* glyph names, for fonts that are not in the file (their characters are found through the encoding, by name) */
 const PDF_NAMES = { ' ': 'space', '!': 'exclam', '"': 'quotedbl', '#': 'numbersign', $: 'dollar', '%': 'percent', '&': 'ampersand', "'": 'quotesingle', '(': 'parenleft', ')': 'parenright', '*': 'asterisk', '+': 'plus', ',': 'comma', '-': 'hyphen', '.': 'period', '/': 'slash', ':': 'colon', ';': 'semicolon', '<': 'less', '=': 'equal', '>': 'greater', '?': 'question', '@': 'at', '[': 'bracketleft', '\\': 'backslash', ']': 'bracketright', '^': 'asciicircum', _: 'underscore', '`': 'grave', '{': 'braceleft', '|': 'bar', '}': 'braceright', '~': 'asciitilde', '’': 'quoteright', '‘': 'quoteleft', '“': 'quotedblleft', '”': 'quotedblright', '–': 'endash', '—': 'emdash', '•': 'bullet', '€': 'Euro', '£': 'sterling', '¥': 'yen', '©': 'copyright', '®': 'registered', '°': 'degree', '·': 'periodcentered' };
 const PDF_DIGITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
@@ -118,6 +131,7 @@ async function pdfLibPlan(info) {
   for (const { url } of [...enc.values()]) { const ff = await pdfFontFile(url); if (ff && ff.fk.hasGlyphForCodePoint(32)) { enc.set(' ', { url }); break; } }
   return { enc };
 }
+/* ---------- cutting a library font down to the characters used ---------- */
 /* a glyph outline (a fontkit path of lines and quadratic curves) as a TrueType simple glyph; Buf: fontkit's buffer class */
 function pdfGlyf(path, Buf) {
   const pts = [], ends = [];
@@ -165,7 +179,10 @@ function pdfFixSubset(font) {
     return this.glyf.length - 1;
   };
 }
-/* write the new text of one edit onto the page. Throws when a character cannot be written after all. */
+/* ---------- the operators ---------- */
+/* Write the new text of one edit onto the page. Throws when a character cannot be written after all.
+   pg: the page record (pages.js) · pl: the edit's plan entry (build.js) · scan: pdfScanShows() of the page's content
+   fonts: Map font file → the font as put into the document (one for the whole file) · keys: Map font file → its name on this page */
 async function pdfWriteText(L, doc, page, pg, pl, scan, fonts, keys) {
   const set = pl.e.pdf.set, vp = pg.vp;
   const glyph = async ch => {

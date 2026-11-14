@@ -1,8 +1,14 @@
+/* =====================================================================
+   pdf/save.js — saving a PDF: build the file, say in plain words what was done (pdfReportText), offer it for
+   sharing or download. And pdfInit(): the page buttons and whatever else only the installable build has.
+   ===================================================================== */
+/* why an edit went into the file as a picture and not as text. The keys are set in edit.js, write.js and build.js. */
 const PDF_WHY = {
   image: '那里不是 PDF 文字（扫描件或图片里的字）', nested: '旧文字在嵌套的对象里', hidden: '那里是扫描件上的隐藏文字层', strip: '旧文字的写法特殊，没法干净地去掉', ops: '页面内容的结构特殊',
   annot: '改动处有批注或表单域', overlap: '和另一处改动重叠', sysfont: '新文字用的是设备自带的字体，放不进 PDF', synth: '用到了字体本身没有的粗体或斜体', glyph: '字体里缺少要用的字',
   file: '字体文件没取到（离线时需要先下载字体包）', font: '选的是其它页的字体', script: '新文字需要连写排版', soft: '原文字边缘是虚的', look: '写成文字后和屏幕上的样子对不上'
 };
+/* the report of pdfBuild() in words, for the save sheet */
 function pdfReportText(r) {
   const pl = a => '第 ' + a.join('、') + ' 页';
   if (r.whole) return (r.why === 'protected' ? '这个 PDF 有保护，不能在原文件上改。' : '这个 PDF 的内部结构比较特别，没法在原文件上改。') + '已另存为新文件：每一页都转成了图片，文字不能再选中或搜索。';
@@ -19,6 +25,7 @@ function pdfReportText(r) {
   return t;
 }
 
+/* the save button, with a PDF open: build the file and show the sheet */
 async function pdfSave() {
   const P = S.pdf;
   if (!P || PDFS.saving) return;
@@ -53,6 +60,7 @@ async function pdfSave() {
   } finally { PDFS.saving = false; }
 }
 
+/* what the installable build has and the artifact does not: PDFs can be opened, pages can be turned */
 function pdfInit() {
   if (BUILD !== 'pages') return;
   $('fileInput').accept = 'image/*,application/pdf,.pdf';

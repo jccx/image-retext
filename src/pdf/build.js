@@ -1,14 +1,42 @@
+/* =====================================================================
+   pdf/build.js — the edited file.
+   pdfBuild() tries until a file comes out whose edited pages, drawn again, show what the screen shows. One round:
+     1. plan every edit: text or picture (and why a picture)
+     2. take the replaced glyphs out of the content stream of each page (core.js)
+     3. write the edits in the order they were made: text operators, or a picture laid over the page
+     4. open the result with pdf.js and check it: every new character is there, where it belongs; the page looks as it
+        does on screen (pdfInkCheck); nothing of the old text is left under the edits
+   An edit that fails a check is forced to a safer way of writing, and the file is built again:
+   text coloured with the old text's own colour operators → text in plain RGB → a picture. From the sixth round on,
+   every edit is a picture.
+
+   A plan entry (pl), one for each edit of a page:
+     { e: the edit (pg.edits) · text: it goes in as text · why: the reason when it does not (a key of PDF_WHY in save.js)
+       write: the font plan (write.js) · gl: the glyphs it replaces
+       mode: 'exact', colour it with the operators the old text was coloured with, or 'rgb'
+       exact: those operators could really be used · ink: what pdfInkCheck found }
+   The report:
+     { pages: the edited pages · text, pics: how many edits went in as text and as pictures · why: { reason: how many }
+       removed: old glyphs taken out · covered, coveredPages: old glyphs that are still in the file under an edit
+       checked: the result was opened and looked at · flat: the edited pages were turned into pictures
+       whole: the file had to be made anew, every page a picture · annots: notes and form fields merged into the page
+       dpi: resolution of the pictures · list: [[page, 1 text or 0 picture, why]] }
+   ===================================================================== */
 /* Build the edited PDF → { bytes, report }.
    New text goes into the file as text wherever that can be done and comes out looking as it does on screen; an edit that
    cannot be written that way is laid over the page as a small picture. flat: pages with edits become pictures altogether
    (nothing of their old text is left, and nothing on them can be selected). */
 async function pdfBuild(flat) {
-  const force = new Map();       // an edit (by its picture) → 'rgb' (write it with the colour seen on screen) or the reason it has to be a picture
+  /* an edit → 'rgb' (write it with the colour seen on screen) or the reason it has to be a picture. The key is the edit's
+     picture: the edit records themselves are made anew every round (pdfStash), the picture stays the same. */
+  const force = new Map();
   for (let round = 0; ; round++) {
     const out = await pdfBuildOnce(flat, force, round >= 5);
     if (out.bytes) return out;
   }
 }
+/* one round → { bytes, report }, or { bytes: null } when `force` has gained entries and the file has to be built again.
+   allPic: no edit goes in as text. */
 async function pdfBuildOnce(flat, force, allPic) {
   const P = S.pdf;
   pdfStash();

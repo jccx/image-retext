@@ -1,5 +1,11 @@
-/* ---------- text inputs ---------- */
+/* =====================================================================
+   app/inputs.js — the two text boxes of an edit: 原文字, what the picture says (the font match goes by it),
+   and 新文字, what it should say (the preview goes by it).
+   ===================================================================== */
+/* an input method is at work (pinyin being typed): the half-typed text is not matched */
 let composing = false;
+/* The original text of the open edit is v. fromOcr: it was read rather than typed, so the box shows it, and an empty
+   新文字 starts as a copy of it (or as the replacement typed before for the same searched text). */
 function setOrig(v, fromOcr) {
   const ed = S.edit;
   if (!ed) return;
@@ -9,7 +15,6 @@ function setOrig(v, fromOcr) {
   if (ed.origLines.length) scheduleMatch(fromOcr ? 0 : 550);
   else { ed.matchToken++; ed.st.matched = false; ed.st.score = null; ed.cands = []; renderCands(); computeFit(ed); refresh(); setStatus('输入原文字后，自动比对字体。'); }
 }
-/* the two text boxes: 原文字 (what the picture says) and 新文字 (what it should say) */
 function inputsInit() {
   $('inOrig').addEventListener('compositionstart', () => { composing = true; });
   $('inOrig').addEventListener('compositionend', e => { composing = false; setOrig(e.target.value); });

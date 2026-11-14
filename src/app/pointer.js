@@ -1,4 +1,12 @@
-/* ---------- pointer interactions ---------- */
+/* =====================================================================
+   app/pointer.js — fingers and the mouse on the picture: dragging out a box (a new edit), dragging a handle of the
+   box (resizing it), two fingers or the wheel (zoom), the middle button or the space bar (moving the picture).
+   What a pointer is doing is kept in S.drag:
+     { type: 'new', sx, sy: where it went down on the stage · ix, iy: the same in the picture · rect: the box so far · moved }
+     { type: 'resize', h: which handle ('nw', 'ne', 'sw', 'se') · start: the box before · rect · moved }
+     { type: 'pan', lx, ly: where the pointer was last }
+   ===================================================================== */
+/* the box of a resize, with the dragged corner at the point p of the stage */
 function handleRect(d, p) {
   const r0 = d.start, q = toImg(p.x, p.y);
   let x0 = r0.x, y0 = r0.y, x1 = r0.x + r0.w, y1 = r0.y + r0.h;
@@ -6,11 +14,13 @@ function handleRect(d, p) {
   if (d.h[0] === 'n') y0 = q.y; else y1 = q.y;
   return normRect(x0, y0, x1, y1);
 }
+/* the rectangle between two corners, cut to the picture */
 function normRect(x0, y0, x1, y1) {
   const ax = clamp(Math.min(x0, x1), 0, S.iw), bx = clamp(Math.max(x0, x1), 0, S.iw);
   const ay = clamp(Math.min(y0, y1), 0, S.ih), by = clamp(Math.max(y0, y1), 0, S.ih);
   return { x: ax, y: ay, w: bx - ax, h: by - ay };
 }
+/* a finger or a button goes down: a second finger starts a pinch, otherwise a box, a resize or a pan */
 function pointerDown(e) {
   if (!S.img || e.target.closest('.zoom')) return;
   warmReader();
@@ -32,6 +42,7 @@ function pointerDown(e) {
   else { const q = toImg(p.x, p.y); S.drag = { type: 'new', sx: p.x, sy: p.y, ix: q.x, iy: q.y, rect: null, moved: false }; }
   e.preventDefault();
 }
+/* the pointer moves: zoom and move with two fingers, otherwise carry on with what S.drag says */
 function pointerMove(e) {
   if (!S.pointers.has(e.pointerId)) return;
   const p = stagePt(e);
@@ -55,6 +66,7 @@ function pointerMove(e) {
     requestDraw();
   } else if (d.type === 'resize') { d.moved = true; d.rect = handleRect(d, p); requestDraw(); }
 }
+/* the pointer is lifted: a box that is large enough opens an edit */
 function endPointer(e) {
   if (!S.pointers.has(e.pointerId)) return;
   S.pointers.delete(e.pointerId);

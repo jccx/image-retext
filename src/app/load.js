@@ -1,4 +1,8 @@
-/* ---------- image loading ---------- */
+/* =====================================================================
+   app/load.js — opening a file. A picture becomes the canvas that is edited (setImage). A PDF goes to pdf/pages.js,
+   which hands over one page at a time through the same setImage().
+   ===================================================================== */
+/* open a file that was picked, pasted or dropped. A picture larger than 4096 pixels is reduced to that. */
 async function loadBlob(blob, name) {
   if (isPdf(blob, name)) { await openPdf(blob, name); return; }
   let bmp;
@@ -18,6 +22,8 @@ async function loadBlob(blob, name) {
   warmReader();
   if (k < 1) toast('图片很大，已缩小到最长边 4096 像素');
 }
+/* this canvas (c, with its context x) is the picture now: an open edit is dropped, the undo list starts empty.
+   demo: it is the sample picture. */
 function setImage(c, x, name, type, demo) {
   dropEdit();
   S.img = c; S.ictx = x; S.iw = c.width; S.ih = c.height; S.name = name.replace(/\.[^.]+$/, ''); S.type = type; S.demo = demo;

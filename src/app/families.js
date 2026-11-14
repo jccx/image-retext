@@ -1,4 +1,20 @@
-/* ---------- font registry ---------- */
+/* =====================================================================
+   app/families.js — the fonts the app knows about.
+   FAM: Map name → family record, holding
+     · the Google Fonts families of the library (fontdb.gen.js)
+     · fonts found on this device (detectSystemFonts)                  sys: true
+     · font files the user uploads (app/controls.js)                   sys: true, custom: true
+     · pairs, a Latin face in front of a CJK face (getComp)            comp: true, stack: [Latin, CJK]
+     · the fonts inside an open PDF (pdf/fonts.js)                     sys: true, pdf: { … }
+   A family record:
+     n       the CSS family name, which is also its key · label: the name shown, where that differs
+     c       's' sans serif, 'r' serif, 'm' monospace, 'h' handwriting, 'd' display
+     w       the weights it has · it: 1 when it has italics
+     tier    1: tried in every match · 2: only when asked to look further (在更多字体里再找一遍) · 0: on the device · 9: a pair
+     sc      script of a library family: '' Latin, 'sc' or 'tc' Chinese, 'jp', 'kr' · cjk: it has Chinese, Japanese or Korean glyphs
+     sys     nothing has to be loaded for it: the browser has it already
+   ===================================================================== */
+/* fonts that devices come with: [name, category, 1 when it has CJK glyphs, the name shown] */
 const SYS_FONTS = [
   ['system-ui', 's', 1, '系统界面字体'], ['ui-rounded', 's', 0, '系统圆体'], ['ui-serif', 'r', 0, '系统衬线体'], ['ui-monospace', 'm', 0, '系统等宽体'],
   ['Arial', 's'], ['Helvetica', 's'], ['Helvetica Neue', 's'], ['Arial Black', 's'], ['Arial Narrow', 's'], ['Verdana', 's'], ['Tahoma', 's'],
@@ -32,9 +48,12 @@ const SYS_FONTS = [
   ['sans-serif', 's', 1, '默认无衬线'], ['serif', 'r', 1, '默认衬线'], ['monospace', 'm', 0, '默认等宽']
 ];
 const FAM = new Map();
+/* the families that need no loading, in the order they are tried: device fonts, then uploaded ones */
 const sysFams = [];
 for (const r of GF) FAM.set(r[0], { n: r[0], c: r[1], w: r[2], it: r[3], tier: r[4], sc: r[5], sys: false, cjk: !!r[5] });
 
+/* Which of SYS_FONTS does this device have? A font is there when text set in it measures differently from the fallback.
+   Names that turn out to be one and the same font (same widths, same picture) are kept once. */
 function detectSystemFonts() {
   const ctx = mctx(64, 64);
   const T = 'mmmmmmmmmmlli1234567890WQgj@中文字體あ한';
@@ -63,6 +82,7 @@ function detectSystemFonts() {
     FAM.set(n, f); sysFams.push(f);
   }
 }
+/* the name shown for a family; the weight a family has that is nearest to w */
 const famLabel = f => (f.label || f.n);
 const nearW = (f, w) => f.w.reduce((a, b) => (Math.abs(b - w) < Math.abs(a - w) ? b : a));
 /* a Latin face in front of a CJK face, the way pages and apps stack fonts for mixed 中英文 text */
@@ -72,12 +92,14 @@ function getComp(L, C) {
   if (!f) { f = { n, c: C.c, w: C.w, it: L.it, tier: 9, sc: '', sys: false, cjk: true, comp: true, stack: [L, C], label: famLabel(L) + ' + ' + famLabel(C) }; FAM.set(n, f); }
   return f;
 }
+/* which script decides the choice of fonts for a text: 'jp', 'kr', 'han' or 'latin' */
 function scriptOf(t) {
   if (/[\u3040-\u30ff]/.test(t)) return 'jp';
   if (/[\uac00-\ud7af\u1100-\u11ff]/.test(t)) return 'kr';
   if (/[\u3400-\u9fff\uf900-\ufaff]/.test(t)) return 'han';
   return 'latin';
 }
+/* the families worth trying for a text: those of the device, and the library families of its script up to tier tierMax */
 function candidateFamilies(text, tierMax) {
   const sc = scriptOf(text), out = [];
   for (const f of sysFams) if (sc === 'latin' || f.cjk || f.custom) out.push(f);

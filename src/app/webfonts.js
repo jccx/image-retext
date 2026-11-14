@@ -1,6 +1,14 @@
-/* ---------- web font loading (Google Fonts stylesheets, faces fetched on demand) ---------- */
+/* =====================================================================
+   app/webfonts.js — getting library fonts into the page.
+   A family needs its style sheet (ensureCss), which names a font file for every weight, style and range of characters;
+   the browser fetches a file when text needs it, which document.fonts.load() asks for ahead of time (ensureFace).
+   The Claude artifact takes style sheets and files from Google Fonts. The installable build hosts them itself and
+   contacts no other site; with downloaded packs its service worker answers from the device.
+   ===================================================================== */
 const GF_BASE = 'https://fonts.googleapis.com/css2?';
+/* family name → promise of whether its style sheet has loaded */
 const cssState = new Map();
+/* a family as Google Fonts' address writes it, with all its weights (and italics) */
 function gfSpec(f, noItalic) {
   const n = f.n.replace(/ /g, '+');
   if (f.it && !noItalic) return n + ':ital,wght@' + f.w.map(w => '0,' + w).concat(f.w.map(w => '1,' + w)).join(';');
@@ -19,6 +27,7 @@ function linkCss(href) {
     document.head.appendChild(l);
   });
 }
+/* a Google Fonts style sheet for these families → promise of whether it loaded */
 function addCss(specs) {
   if (BUILD === 'pages') return Promise.resolve(false);     // the installable build contacts no other site; all its fonts are hosted alongside
   return linkCss(GF_BASE + specs.map(s => 'family=' + s).join('&') + '&display=swap');
@@ -28,6 +37,8 @@ function addSelfCss(f) {
   const sf = SELF_FONTS[f.n];
   return linkCss('fonts/' + sf.id + '/' + sf.id + '.css');
 }
+/* make sure the style sheets of these families are in the page → promise of [true | false], one for each family.
+   Google Fonts is asked for six families at a time; a family the joint request fails for is asked for on its own. */
 function ensureCss(fams) {
   const flat = [];
   for (const f of fams) { if (f.stack) flat.push(...f.stack); else flat.push(f); }
@@ -43,7 +54,9 @@ function ensureCss(fams) {
   }
   return Promise.all(fams.map(f => (f.stack ? Promise.all(f.stack.map(m => (m.sys ? true : cssState.get(m.n)))).then(a => a.every(Boolean)) : f.sys ? true : cssState.get(f.n))));
 }
+/* face and text → promise of whether the font files for it have loaded */
 const faceState = new Map();
+/* make sure the face c = { fam, weight, italic } can draw `text` → promise of true, or of false when it cannot be loaded */
 function ensureFace(c, text) {
   const f = c.fam;
   if (f.stack) return Promise.all(f.stack.map(m => ensureFace({ fam: m, weight: nearW(m, c.weight), italic: c.italic }, text))).then(a => a.every(Boolean));
@@ -65,6 +78,7 @@ function ensureFace(c, text) {
   }
   return p;
 }
+/* the faces of `vars` that could be loaded for `text`; onProg(done, total) is told how far it is */
 async function loadFaces(vars, text, onProg) {
   let done = 0;
   const total = vars.length;

@@ -1,4 +1,9 @@
-/* nearest drawn Chinese characters for one observed glyph: o = { F, C, nF, lasp } → [{ ch, s }] best first */
+/* =====================================================================
+   reader/classify.js — what one box of ink is: the nearest Chinese characters among the drawn templates,
+   or the Latin character the classifier sees in it. (How a line is cut into boxes is line.js.)
+   ===================================================================== */
+/* Nearest drawn Chinese characters for one observed glyph: o = { F, C, nF, lasp } → the K best [{ ch, t: template, s: likeness }].
+   The 8×8 copies pick the 32 most alike among templates of similar proportions; the full 24×24 pictures rank those. */
 function ocrCJK(o, K) {
   const B = OCR.bank, n = B.n, KC = 32, C = B.C, oc = o.C;
   const idx = new Int32Array(KC).fill(-1), sc = new Float32Array(KC).fill(-1);

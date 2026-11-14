@@ -1,10 +1,26 @@
-/* ---------- reading: the PDF knows its own text ---------- */
+/* =====================================================================
+   pdf/fonts.js — the fonts that new text on a PDF page can be set in.
+   · The file's own fonts. pdf.js loads them to draw the pages, so they can draw the new text too, which then matches the
+     old exactly. But a font in a PDF usually holds only the characters the document uses.
+     Each becomes a family record in FAM (app/families.js) that has a `pdf` part:
+       pdf: { id: pdf.js's id of the font · css, fs, fw: how a canvas is told to use it · fo: pdf.js's font object
+              whole: a font of the device stands in for one the file does not carry (so no character is missing)
+              map: character → { fc: the character that draws its glyph on screen · code, w: its code and width in the file } }
+   · The library's fonts, the ones this site hosts. A family can be put into the file when every face of it is hosted here;
+     its font files say which characters it really has.
+   While an edit is open, the functions here keep the font in use to one that can draw every character of the new text
+   (pdfFontFor, pdfCoverNote), and say so when the choice means the edit will be saved as a picture (pdfFontNote).
+   ===================================================================== */
+
+/* ---------- font names: which library families a PDF's font name points to ---------- */
+/* names of common fonts (squashed) → their open look-alike in the library */
 const PDF_ALIAS = [
   [/arial|helvetica|liberationsans|nimbussans|arimo/, 'Arimo'], [/timesnewroman|^times|liberationserif|nimbusroman|tinos/, 'Tinos'], [/courier|liberationmono|nimbusmono|cousine/, 'Cousine'],
   [/calibri|carlito/, 'Carlito'], [/cambria|caladea/, 'Caladea'], [/georgia/, 'Gelasio'],
   [/simsun|songti|stsong|sourcehanserif|notoserifcjk|notoserifsc|fangsong/, 'Noto Serif SC'],
   [/simhei|yahei|msyh|pingfang|heiti|sourcehansans|notosanscjk|notosanssc|dengxian|stxihei/, 'Noto Sans SC']
 ];
+/* a font name without case, spaces and punctuation */
 const pdfSquash = s => s.toLowerCase().replace(/[^a-z0-9㐀-鿿]/g, '');
 /* a font name as PDFs write it (ABCDEF+TimesNewRomanPS-BoldMT) → { label, fams: families worth trying first, weight, italic } */
 function pdfFontHint(name) {
@@ -21,6 +37,8 @@ function pdfFontHint(name) {
 /* ---------- the PDF's own fonts ----------
    pdf.js loads every font of the file to draw the pages. The same fonts can draw the new text, which then matches the
    old exactly, but only with the characters the file carries (fonts in a PDF are usually cut down to what the document uses). */
+/* A text-showing operator of a page was read: note its font (a family record the first time it is seen) and which characters
+   its glyphs stand for. The character map of a font grows with every page that is looked at. */
 function pdfNoteFont(P, id, f, glyphs) {
   if (!id || !f || f.isType3Font || f.vertical || f.disableFontFace || f.isInvalidPDFjsFont) return;
   let fam = P.fonts.get(id);
@@ -46,6 +64,7 @@ function pdfMissing(fam, t) {
   for (const ch of t) if (ch.trim() && !fam.pdf.map.has(ch) && !miss.includes(ch)) miss.push(ch);
   return miss.join('');
 }
+/* the PDF is closed: its fonts leave the list of families */
 function pdfDropFonts() {
   let any = false;
   for (const [k, f] of [...FAM.entries()]) if (f.pdf) { FAM.delete(k); any = true; }
@@ -82,9 +101,10 @@ function pdfFontNote(ed) {
   setStatus((el.textContent ? el.textContent + ' ' : '') + '这款是设备自带的字体，放不进 PDF：保存后这处是贴上去的图片。想要真正的文字，可以在“微调”里换一款字体库里的字体。', el.classList.contains('warn'));
 }
 
-/* ---------- the new text as text: which font writes it ---------- */
+/* ---------- the library's fonts: can a family go into the file, and which characters do its files have ---------- */
+/* only fonts this site hosts can be put into a PDF: their files can be fetched and cut down to the characters used */
 const pdfEmbeddable = fam => (fam.stack || [fam]).every(m => !m.sys && !m.pdf && !!SELF_FONTS[m.n]);
-/* the @font-face rules of a library family: which file serves which characters */
+/* the @font-face rules of a library family: which file serves which characters → promise of [{ w, style, url, ranges: [[from, to]] }] */
 function pdfFaceRules(m) {
   const id = SELF_FONTS[m.n].id;
   if (!PDFS.css.has(id)) {
@@ -104,7 +124,7 @@ function pdfFaceRules(m) {
   }
   return PDFS.css.get(id);
 }
-/* a font file of the library, read → { bytes, fk } or null */
+/* a font file of the library, read → promise of { bytes, fk: the font as fontkit opens it }, or of null */
 function pdfFontFile(url) {
   if (!PDFS.files.has(url)) {
     const p = Promise.all([pdfFontkit(), fetch(url).then(r => (r.ok ? r.arrayBuffer() : null))]).then(([fk, buf]) => (buf ? { bytes: new Uint8Array(buf), fk: fk.create(new Uint8Array(buf)) } : null)).catch(() => null);
@@ -155,6 +175,7 @@ async function pdfCoverNote(ed) {
   if (same()) setStatus(what + '，这几个字会用别的字体显示，保存后这处是贴上去的图片。可以在“微调”里换一款字体。', true);
 }
 
+/* ---------- fitting ---------- */
 /* The PDF's own font, placed exactly where the file puts the glyphs: nothing is fitted, the file says where every word
    starts, where the baseline runs and how large the type is. → a candidate like refineCand's, or null. */
 function pdfExact(ed, text, T) {

@@ -1,4 +1,20 @@
-/* the text under a selection, straight from the PDF → { text, hint, fam } or null when the page has no usable text there */
+/* =====================================================================
+   pdf/edit.js — a selection on a PDF page. The page knows its own glyphs, which a plain picture does not:
+   the original text needs no reading (pdfReadEdit), glyphs beside the selection stay out of what is erased (pdfProtect),
+   and an applied edit remembers what saving needs to write it into the file as text (pdfEditInfo).
+
+   What an applied edit remembers (u.pdf in the undo list, e.pdf in pg.edits), in pixels of the page picture:
+     { sel: the box the user drew · area: the region that was analysed and repainted
+       rm: the glyphs replaced, each as [k, j]: glyph j of text-showing operator k (core.js)
+       why: '' or the reason, known already, why the edit cannot go in as text (a key of PDF_WHY in save.js)
+       set: the new text → { fam, weight, italic, px, color · userColor: the user picked the colour
+                            runs: [{ y: baseline, chars: [{ ch, x: pen origin }] }] } ; null when the text was only erased
+       ink: the box the ink of the new text takes up
+       cov: { x, y, w, h, a: Uint8Array }, how much of each pixel the new text covers (0–255), to compare with the saved page }
+   ===================================================================== */
+/* The text under a selection, straight from the PDF → { text, hint, fam, lines }, or null when the page has no usable text there.
+   hint: what the name of the font says (pdfFontHint) · fam: the file's own font, when the whole selection is set in one
+   lines: [{ text, g: the glyphs }], for placing the file's own font exactly (pdfExact) */
 function pdfReadEdit(ed) {
   const P = S.pdf, pg = P && P.pages.get(P.cur);
   if (!pg) return null;
@@ -12,6 +28,7 @@ function pdfReadEdit(ed) {
   return { text: r.text, hint: pdfFontHint(r.fonts[0]), fam: ids.size === 1 ? P.fonts.get([...ids][0]) || null : null, lines: r.lines };
 }
 /* ---------- what an edit did, kept with it for saving ---------- */
+/* do two rectangles overlap? */
 const pdfHit = (a, b) => !!a && !!b && a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 /* has an earlier edit of this page changed what lies in r? */
 function pdfTouched(r) {

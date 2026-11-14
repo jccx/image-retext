@@ -1,5 +1,9 @@
-/* ---------- controls ---------- */
-/* the buttons and fields of the two panels */
+/* =====================================================================
+   app/controls.js — the buttons and fields of the panels: opening a file, applying, erasing, re-reading,
+   comparing with the original, and everything under 微调 (font, weight, size, spacing, colour, alignment,
+   position, soft edges, how far around the old text is erased, uploading a font file).
+   Each control changes the open edit and calls refresh() or chooseFont().
+   ===================================================================== */
 function controlsInit() {
   $('btnOpen').onclick = () => $('fileInput').click();
   $('fileInput').onchange = async e => {

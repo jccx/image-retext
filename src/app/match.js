@@ -1,8 +1,22 @@
-/* ---------- matching ---------- */
+/* =====================================================================
+   app/match.js — finding the font of the old text. runMatch() runs whenever the original text of the open edit
+   becomes known or changes:
+     1. the families worth trying for the script of the text; their regular and bold faces are loaded
+     2. all of them ranked quickly on a small copy of the longest line (stage1)
+     3. for text that was read and not typed: the spellings the reader could not tell apart are tried, and the text corrected
+     4. every weight of the leading families; for mixed 中英文, pairs of a Latin face in front of a CJK face
+     5. the best ten fitted exactly (refineCand), then the weights next to the winner, and on a PDF the file's own font
+     6. the winner is adopted (adopt): the style of the edit takes its face, size, spacing and place
+   Fonts load and the page is given time in between, so every step checks that the edit it started for is still open
+   and unchanged (stale()).
+   ===================================================================== */
 let matchTimer = 0;
+/* run the match in `delay` ms, unless it is asked for again before then (while the user types) */
 function scheduleMatch(delay) { clearTimeout(matchTimer); matchTimer = setTimeout(() => runMatch(), delay); }
+/* a face as a key */
 const vkey = c => c.fam.n + '|' + c.weight + '|' + (c.italic ? 1 : 0);
 
+/* match fonts for the open edit: the steps are listed at the top of this file */
 async function runMatch() {
   const ed = S.edit;
   if (!ed || !ed.an.found) return;
@@ -260,6 +274,7 @@ async function runMatch() {
   renderCands();
 }
 
+/* use candidate r for the open edit. auto: the match chose it, so what the user nudged by hand starts afresh */
 function adopt(r, auto) {
   const ed = S.edit, st = ed.st;
   st.fam = r.fam; st.weight = r.weight; st.italic = r.italic;
@@ -267,6 +282,7 @@ function adopt(r, auto) {
   if (auto) { st.blur = Math.round(r.blur * 20) / 20; st.sizeAdj = 1; st.trAdj = 0; st.dx = 0; st.dy = 0; }
   computeFit(ed); refresh();
 }
+/* the user picked a family, a weight or the slant: load that face, fit it to the old text when that is known, and use it */
 async function chooseFont(fam, weight, italic) {
   const ed = S.edit;
   if (!ed) return;

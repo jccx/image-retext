@@ -1,6 +1,21 @@
 /* =====================================================================
-   Region analysis: separates text from background inside a user box.
-   img: ImageData. Returns background patch, alpha map, colour, geometry.
+   image/analyze.js — what is inside a box the user drew: which pixels are text, what colour the text has,
+   what the background behind it looks like, and where the lines and words are.
+   All coordinates are pixels of the region handed in (the box plus a small margin), not of the whole picture.
+
+   analyzeRegion(img, opts) → an = {
+     w, h          size of the region
+     alpha         Float32Array, 0…1: how much of each pixel is text
+     hole          Uint8Array, 0/1: the text grown by `grow` pixels. These pixels are replaced when the edit is applied
+     bR, bG, bB    the region with the text taken out: under `hole` the repaired background (with grain), elsewhere the picture
+     color         [r, g, b] of the text          bgColor   mean background colour under the text
+     grow          how far the text mask was grown (the 擦除范围 slider)
+     grain         noise level of the picture     contrast  the largest difference from the background that was found
+     found         false when nothing in the box stands out from its background
+   }
+   opts (all optional): grow, a number of pixels · color, the text colour when it is known · sensitivity, a factor on the threshold
+
+   findBands(alpha, …) → the lines of text, top to bottom: [{ x0, y0, x1, y1 }] (x1 and y1 are one past the last pixel)
    ===================================================================== */
 function analyzeRegion(img, opts) {
   opts = opts || {};
@@ -244,7 +259,8 @@ function analyzeRegion(img, opts) {
   return { w, h, bR, bG, bB, hole, alpha, color, bgColor, grain, grow, found, contrast: dmax };
 }
 
-/* ---------- text lines inside the alpha map ---------- */
+/* The lines of text in an alpha map: rows that hold ink, joined where the gap is small (accents, the dot of an i).
+   expected: how many lines the text is known to have, or 0 → [{ x0, y0, x1, y1 }], the box of the ink of each line. */
 function findBands(alpha, w, h, expected) {
   const TH = 0.5;
   const rows = new Int32Array(h);
@@ -314,7 +330,7 @@ function stemWidth(a, w, x0, y0, x1, y1) {
   return runs[runs.length >> 1];
 }
 
-/* ---------- italic slant estimate (degrees, 0 = upright) ---------- */
+/* How far a line leans, in degrees (0 = upright): the shear at which its upright strokes line up best into columns */
 function estimateSlant(alpha, w, h, band) {
   const pts = [];
   const bh = band.y1 - band.y0, bw = band.x1 - band.x0;
@@ -339,7 +355,8 @@ function estimateSlant(alpha, w, h, band) {
   return best >= 3 && bestS > s0 * 1.012 ? best : 0;     // gentle italics (Lora, Georgia) gain only a little; upright text loses 2% or more at 3°
 }
 /* Observed words of a line: the k widest column gaps split it into k+1 blobs.
-   Returns null unless those gaps clearly stand out from the gaps between letters. */
+   Returns null unless those gaps clearly stand out from the gaps between letters.
+   → { runs: [{ s, e }] (columns of the region), odd: the gaps are not ordinary word spacing } */
 function wordRuns(alpha, w, h, band, k) {
   if (k < 1) return null;
   const bw = band.x1 - band.x0, cols = new Uint8Array(bw);

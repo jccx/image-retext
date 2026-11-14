@@ -1,4 +1,8 @@
-/* ---------- demo picture (clearly labelled as an example) ---------- */
+/* =====================================================================
+   app/demo.js — the sample picture shown until the user opens a file of their own: a poster and a notice under it,
+   drawn here in library fonts, with light and dark type, Chinese and English, and words that come up more than once,
+   so that every feature can be tried on it. It is labelled 示例图片 on screen.
+   ===================================================================== */
 async function makeDemo() {
   const D = [['Noto Serif SC', 900, '周末手作市集'], ['Noto Sans SC', 500, '11月21日—22日 · 10:00–18:00'], ['Noto Sans SC', 700, '门票 ¥25'],
     ['Oswald', 500, 'WEEKEND CRAFT MARKET'], ['Lora', 500, 'Handmade goods, coffee & live music', true],

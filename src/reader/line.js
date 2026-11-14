@@ -1,3 +1,16 @@
+/* =====================================================================
+   reader/line.js — one line of a selection, read: pieces of ink → glyphs → characters → text.
+   an: the analysed region (image/analyze.js). b: the band of the line in it, { x0, y0, x1, y1 }.
+   Boxes inside a line are counted from the corner of the band (b.x0, b.y0), both ends included.
+
+   ocrReadBand(an, b) → the glyphs, left to right:
+     [{ ch: the character · s: how sure, 0…1 · lat: 1 Latin, 0 Chinese · x0, x1, y0, y1: its box
+        top: the readings that were considered [{ ch, s, lat }] · alts: runners-up worth trying against the picture
+        was: what it read as before its neighbours changed it · fw: 1 for punctuation set full-width }]
+     with the size of the type, in pixels, as .em on the array
+   ocrCompose(b, glyphs) → { text · maybe: places in the text where a space may be missing
+                             slots: [{ i, alts }], characters in doubt and what else they may be }
+   ===================================================================== */
 /* connected pieces of ink in one line, left to right; pieces stacked above one another are one unit (i, ：, 三, 国).
    Each unit also carries the ids of the faint-ink blobs it lies in: two units of one id are joined by a hairline. */
 function ocrUnits(an, b) {
@@ -50,10 +63,14 @@ function ocrFeat(an, b, x0, y0, x1, y1, F, C, geo) {
   return nF;
 }
 
+/* letters that look like digits → the digit */
 const OCR_DIG = { O: '0', o: '0', D: '0', Q: '0', l: '1', I: '1', '|': '1', i: '1', S: '5', s: '5', B: '8', Z: '2', z: '2', G: '6', b: '6', g: '9', q: '9' };
+/* punctuation → its full-width form, as Chinese text sets it */
 const OCR_FW = { ',': '，', ':': '：', ';': '；', '!': '！', '?': '？', '(': '（', ')': '）' };
+/* letters whose capital and small forms have the same shape: only their height tells them apart */
 const OCR_CASE = 'cosuvwxz';
 const isHan = ch => /[㐀-鿿]/.test(ch);
+/* median (null for an empty list) */
 const ocrMed = a => (a.length ? a.slice().sort((p, q) => p - q)[a.length >> 1] : null);
 
 /* a blob that is not one glyph (letters that touch): split it at its thinnest columns */
@@ -84,6 +101,7 @@ function ocrCut(an, b, u) {
   return pieces.length > 1 ? pieces : null;
 }
 
+/* characters the classifier cannot tell apart by shape: how sure it is of a reading counts them together */
 const OCR_ALIKE = ['oO0', 'lI1|', 'cC', 'sS', 'vV', 'wW', 'xX', 'zZ', 'uU', 'kK', 'pP', "',", '.·', '-–—_'];
 /* one line of the selection → glyphs with their best characters, left to right */
 function ocrReadBand(an, b) {

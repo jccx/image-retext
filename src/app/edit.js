@@ -1,16 +1,24 @@
-/* ---------- edit lifecycle ---------- */
+/* =====================================================================
+   app/edit.js — the life of an edit. A box is drawn (startEdit), what is in it is analysed (analyzeEdit), and the edit
+   stays open in S.edit until it is applied (app/apply.js) or dropped. Its fields are described in app/state.js.
+   ===================================================================== */
+/* a rectangle in whole pixels, cut to the picture */
 function clampRect(r) {
   const x0 = clamp(Math.floor(r.x), 0, S.iw), y0 = clamp(Math.floor(r.y), 0, S.ih);
   const x1 = clamp(Math.ceil(r.x + r.w), 0, S.iw), y1 = clamp(Math.ceil(r.y + r.h), 0, S.ih);
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
+/* take the preview of the open edit out of the picture again */
 function restoreLive() { const ed = S.edit; if (ed && ed.live) { S.ictx.putImageData(ed.live.before, ed.live.x, ed.live.y); ed.live = null; } }
+/* give the open edit up: the picture is as it was */
 function dropEdit() {
   if (S.edit) { S.edit.matchToken++; restoreLive(); }
   S.edit = null;
   $('pEdit').hidden = true; $('pIdle').hidden = false;
   requestDraw();
 }
+/* Look at what is in the box: the region (the box with a margin), its text and background, its lines.
+   keepGrow: the 擦除范围 the user has set, or null to let the analysis choose. */
 function analyzeEdit(ed, keepGrow) {
   const ur = ed.userRect;
   const pad = Math.round(Math.min(ur.w, ur.h) * 0.08) + 2;
@@ -20,6 +28,9 @@ function analyzeEdit(ed, keepGrow) {
   if (S.pdf) pdfProtect(ed);
   ed.bands = findBands(ed.an.alpha, ed.an.w, ed.an.h, ed.origLines.length || 0);
 }
+/* A box has been drawn: open an edit for it.
+   keep: the box of the open edit was resized, so its texts carry over. (Otherwise an open edit with a change in it is applied first.)
+   hit: the occurrence of a searched text that the box is for (app/find.js). */
 function startEdit(userRect, keep, hit) {
   const prev = S.edit;
   let carry = null;

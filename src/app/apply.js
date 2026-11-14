@@ -1,4 +1,11 @@
-/* build the patch: repaired background + new text. Reads the clean image. */
+/* =====================================================================
+   app/apply.js — an edit becomes pixels: the background repaired where the old text was, the new text drawn on it
+   (compose). While the edit is open this is a preview (renderLive); commit() makes it final; undo() takes the
+   edit applied last back.
+   ===================================================================== */
+/* Build the patch for an edit: repaired background plus the new text. mode: 'text', or 'erase' for no new text.
+   → { x, y, w, h: where in the picture · data: ImageData · cov: how much of each pixel the new text covers, or null }
+   The picture must not hold the preview when this runs (restoreLive): it reads the pixels around the edit. */
 function compose(ed, mode) {
   const { rect, an, st } = ed;
   const lines = mode === 'erase' ? [] : layoutNew(ed);
@@ -35,6 +42,7 @@ function compose(ed, mode) {
   return { x: wr.x, y: wr.y, w: wr.w, h: wr.h, data: base, cov };
 }
 
+/* paint the preview of the open edit into the picture, remembering what was there */
 function renderLive() {
   const ed = S.edit;
   if (!ed) return;
@@ -47,6 +55,7 @@ function renderLive() {
   ed.live = { x: out.x, y: out.y, before, after: out.data };
   requestDraw();
 }
+/* apply the open edit: paint it for good, put it on the undo list, close the panel. mode: 'text' | 'erase' · quiet: no toast */
 function commit(mode, quiet) {
   const ed = S.edit;
   if (!ed) return;
@@ -67,6 +76,7 @@ function commit(mode, quiet) {
   if (!quiet) toast(mode === 'erase' ? '已擦除。可以继续框选' : left > 0 ? '已应用。查找的文字还剩 ' + left + ' 处没改' : left === 0 ? '已应用。查找到的几处都改完了' : '已应用。可以继续框选其它文字');
   requestDraw();
 }
+/* drop the open edit; with none open, take back the edit applied last */
 function undo() {
   if (S.edit) { dropEdit(); return; }
   const u = S.undo.pop();

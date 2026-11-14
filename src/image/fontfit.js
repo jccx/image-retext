@@ -1,3 +1,21 @@
+/* =====================================================================
+   image/fontfit.js — which face was the old text set in, at what size, with what letter spacing, and exactly where?
+   A candidate face is drawn over the text found in the picture, and the two are compared pixel by pixel.
+
+   The picture's side is a target T (makeTarget): one line of the alpha map with a margin, possibly reduced →
+     { A: Uint8Array, ink 0–255 · tw, th: its size · k: the reduction asked for (≤ 1) · kx, ky: target pixels per region pixel
+       offX, offY: the target's corner in the region · sumA: total ink
+       box: { x0, y0, W, H }, the ink box of the line in target pixels
+       runs: [{ s, e }], the words in target pixels when each is fitted on its own, otherwise null }
+   The type's side is a geometry g (fitGeom), in target pixels →
+     { px: size · tr: letter spacing · trEm: the same per 1px of size · xs: pen origin of every word, or of the line
+       ox: xs[0] · oy: baseline · words: the words when each is placed on its own, otherwise null · … }
+   The measure is a soft intersection over union (softIoU): 1 when drawn ink and picture agree everywhere.
+
+   stage1() ranks many faces quickly on a small target. refineCand() fits one face exactly and gives the result in
+   region pixels. placeLine() places the further lines of a block. glyphScores() checks the text character by character.
+   ===================================================================== */
+/* how many words of the target are fitted on their own (1: the line as a whole) */
 const nRunsOf = T => (T.runs ? T.runs.length : 1);
 /* observed ink width the model has to fill: the whole line, or the sum of its words when they are anchored separately */
 function obsWidth(im, T) {
@@ -36,8 +54,10 @@ function fitGeom(im, T, px, dx, dy, dW, zero) {
     dx: dx || 0, dy: dy || 0, dW: dW || 0, zero: !!zero
   };
 }
+/* geometry g moved sideways by fx pixels */
 function shiftG(g, fx) { return Object.assign({}, g, { ox: g.ox + fx, xs: g.xs.map(x => x + fx) }); }
 
+/* draw `text` in face c with geometry g → out (Uint8Array tw × th, ink 0–255) */
 function renderAlpha(c, text, g, tw, th, out) {
   const ctx = mctx(tw, th);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -55,6 +75,8 @@ function renderAlpha(c, text, g, tw, th, out) {
 }
 
 let _rsum = 0; // ink total of the last renderAlpha()
+/* Soft intersection over union of two ink maps, the second one shifted by (sx, sy) whole pixels: Σ min / Σ max.
+   sumA, sumR: the totals of the two maps, when the caller has them already. */
 function softIoU(A, Rr, w, h, sx, sy, sumA, sumR) {
   const x0 = sx > 0 ? sx : 0, x1 = sx < 0 ? w + sx : w, y0 = sy > 0 ? sy : 0, y1 = sy < 0 ? h + sy : h;
   let mn = 0;
@@ -77,9 +99,12 @@ function bestShift(T, buf, ry) {
 /* IoU of the last rendering in `buf` against target T, shifted by whole pixels */
 function iouT(T, buf, sx, sy) { return softIoU(T.A, buf, T.tw, T.th, sx || 0, sy || 0, T.sumA, _rsum); }
 
+/* What a fit loses for the letter spacing it needs: little for spread text, much for squeezed text. Type is seldom set
+   tighter than the font's own spacing, so a face that only fits when squeezed is most likely a wider face than the real one. */
 function trackPenalty(trEm) { return trEm < 0 ? 0.7 * -trEm : 0.22 * Math.max(0, trEm - 0.02); }
 
-/* observed target for one text line, padded; scale k <= 1 */
+/* The target for one line of text (see the top of this file): the line's ink with a margin, reduced by k (≤ 1).
+   Rows of the margin that belong to another line (bands) are left empty. runs: the words from wordRuns(), or null. */
 function makeTarget(alpha, w, h, band, bands, k, runs) {
   const pad = Math.max(4, Math.round((band.y1 - band.y0) * 0.12));
   const sx0 = band.x0 - pad, sy0 = band.y0 - pad;
@@ -128,7 +153,8 @@ function makeTarget(alpha, w, h, band, bands, k, runs) {
 }
 
 /* Two readings of the line box: (1) height gives the size and tracking absorbs the width;
-   (2) natural spacing, so the width gives the size (robust when stray marks stretch the box vertically). */
+   (2) natural spacing, so the width gives the size (robust when stray marks stretch the box vertically).
+   → { iou, score: iou less the spacing penalty, im } or null. buf: a scratch Uint8Array(T.tw * T.th). */
 function stage1(c, text, T, buf) {
   const im = inkMetrics(c, text, nRunsOf(T));
   const g = fitGeom(im, T);
@@ -153,7 +179,12 @@ function stage1(c, text, T, buf) {
   return { iou, score: best, im };
 }
 
-/* fine fit of one candidate against target T → geometry in region coords */
+/* Fine fit of one face against target T. Tc: a small copy of the same line, for the third reading below.
+   → the candidate, in region pixels:
+     { fam, weight, italic · iou: how well it fits, 0…1 · score: iou less the spacing penalty (candidates are ranked by it)
+       px: size · trEm: letter spacing per 1px of size · blur: how soft the edges of the old text are
+       ox, oy: pen origin and baseline · xs: pen origin of every word · words: the words when placed one by one, else null · im }
+   or null when the text has no ink in this face. */
 function refineCand(c, text, T, Tc) {
   const im = inkMetrics(c, text, nRunsOf(T));
   const g0 = fitGeom(im, T);
@@ -290,7 +321,7 @@ function refineCand(c, text, T, Tc) {
 }
 
 /* how well each character of the fitted text agrees with the picture; r is a refineCand() result.
-   A character that was read wrongly scores far below its neighbours. */
+   A character that was read wrongly scores far below its neighbours. → [{ ch, iou }] */
 function glyphScores(c, text, T, r) {
   const px = r.px * T.ky, tr = r.trEm * px;
   const toX = x => (x - T.offX) * T.kx;
@@ -318,7 +349,7 @@ function glyphScores(c, text, T, r) {
   });
 }
 
-/* position of another line of the same block, with size and tracking already known */
+/* position of another line of the same block, with size and tracking already known → { ox, oy, xs, words, iou }, region pixels */
 function placeLine(c, text, T, pxFull, trEm) {
   const im = inkMetrics(c, text, nRunsOf(T));
   const px = pxFull * T.ky, tr = trEm * px;

@@ -1,4 +1,12 @@
-/* ---------- multigrid Laplace fill: fills pixels where M[i]==1 ---------- */
+/* =====================================================================
+   image/pixels.js — arithmetic on pixel arrays: filling a hole from its surroundings, a threshold,
+   growing a mask, blurring.
+   An array holds one number per pixel, row after row (index = y * w + x); a mask holds 0 or 1.
+   No canvas and no state: every function works on what it is given.
+   ===================================================================== */
+
+/* Fill the pixels where M[i] == 1 from the pixels around them, smoothly (each filled pixel ends up as the mean of its
+   four neighbours). R, G, B are changed in place. A half-size copy is solved first, so that large holes fill quickly. */
 function inpaintRGB(R, G, B, M, w, h, iters) {
   const n = w * h;
   let unk = 0;
@@ -62,6 +70,7 @@ function inpaintRGB(R, G, B, M, w, h, iters) {
   }
 }
 
+/* Otsu's threshold: the level (0–255) that best splits a 256-bin histogram into a dark and a light group */
 function otsu(hist) {
   let total = 0, sumAll = 0;
   for (let i = 0; i < 256; i++) { total += hist[i]; sumAll += i * hist[i]; }
@@ -79,6 +88,7 @@ function otsu(hist) {
   return thr;
 }
 
+/* grow a mask by r pixels in every direction → new Uint8Array */
 function dilate(M, w, h, r) {
   if (r <= 0) return M.slice();
   const T = new Uint8Array(w * h), O = new Uint8Array(w * h);
@@ -98,6 +108,7 @@ function dilate(M, w, h, r) {
   return O;
 }
 
+/* Gaussian blur of a one-channel picture → new Float32Array */
 function gaussBlur(src, w, h, sigma) {
   if (!(sigma > 0.05)) return src;
   const rad = Math.max(1, Math.ceil(sigma * 2.6));
@@ -124,6 +135,7 @@ function gaussBlur(src, w, h, sigma) {
   return out;
 }
 
+/* median of the first n values (the array is left as it is) */
 function medianOf(arr, n) {
   if (!n) return 0;
   const a = Float32Array.from(arr.subarray ? arr.subarray(0, n) : arr.slice(0, n));
@@ -131,6 +143,7 @@ function medianOf(arr, n) {
   return a[n >> 1];
 }
 
+/* a small random generator → function giving 0…1. The same seed gives the same numbers, so a repaired patch looks the same every time it is drawn. */
 function mulberry32(a) {
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;

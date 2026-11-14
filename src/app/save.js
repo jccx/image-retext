@@ -1,4 +1,8 @@
-/* ---------- saving ---------- */
+/* =====================================================================
+   app/save.js — saving the picture. Inside Claude the file goes through Claude's download capability; elsewhere a
+   sheet shows the result with a share button (phones: straight into Photos) and a download link.
+   A PDF is saved by pdf/save.js, which uses the same sheet.
+   ===================================================================== */
 async function save() {
   if (!S.img) return;
   if (S.pdf) { pdfSave(); return; }

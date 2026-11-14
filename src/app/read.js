@@ -1,4 +1,11 @@
-/* ---------- reading the text with Claude (optional capability) ---------- */
+/* =====================================================================
+   app/read.js — reading the original text of a selection, so that nobody has to type it. Whichever comes first:
+     on a PDF page    the file itself says what is written there (pdf/edit.js): exact, nothing is read
+     inside Claude    the viewer's own Claude reads a cut-out of the picture (recognize)
+     anywhere else    the reader built into the page does, on the device (readLocal → reader/)
+   What was read goes into 原文字 only while the user has not typed there; ed.ocr remembers what came from reading.
+   ===================================================================== */
+/* what Claude is asked */
 const OCR_PROMPT = 'The attached image is a crop from a larger picture, shown on a plain frame. It contains one short piece of text ' +
   '(Chinese, English, digits, or a mix; one or several lines). Transcribe exactly what is written, character by character: ' +
   'keep capitalisation, digits, symbols and punctuation as they appear (full-width punctuation stays full-width); ' +
@@ -73,6 +80,7 @@ async function readText(ed, force) {
   } finally { $('btnOcr').disabled = false; refresh(); }
 }
 
+/* ask Claude to read the selection. tier: 'quick' for the first reading, 'default' (a stronger model) for a second look */
 async function recognize(tier) {
   const ed = S.edit;
   if (!ed || !S.sample) return;
@@ -121,4 +129,5 @@ async function readLocal(ed) {
   if (S.edit !== ed) return null;
   return ocrReadLines(ed.an, ed.bands);
 }
+/* a picture is open and Claude is not there to read it: get the built-in reader ready in the background */
 function warmReader() { if (!S.sample && !OCR.p) Promise.race([S.sampleReady, new Promise(r => setTimeout(r, 1500))]).then(() => { if (!S.sample) ocrLoad(); }); }

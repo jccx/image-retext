@@ -1,8 +1,25 @@
-/* ---------- finding a text everywhere, so that no occurrence is missed ----------
-   In a PDF the text comes from the file. Text inside pictures and scans, and in a plain picture, is not text yet: the built-in
-   reader reads it once, when the user asks for it, and the lines it could read can then be found like any other. */
+/* =====================================================================
+   app/find.js — finding a text everywhere, so that no occurrence is missed when the same thing has to be changed
+   in several places (installable build only).
+   In a PDF the text comes from the file. Text inside pictures and scans, and in a plain picture, is not text yet: the
+   built-in reader reads it once, when the user asks for it, and the lines it could read can then be found like any other.
+
+   What is searched is findCtx(): the open PDF (S.pdf) or the open picture (S.pic). Both carry these fields (findNew):
+     isPic     it is a plain picture: one "page", and all of its text has to be read first
+     n, cur    number of pages, and the page on screen (1 and 1 for a picture)
+     lines     Map page → the text of the page for searching: [{ c: [character], b: Float32Array(x0, x1, y0, y1 for each), ocr }]
+               Characters are folded (findFold) and spaces are left out, so a search ignores case, width and spacing.
+     imgs      Map page → the pictures on the page that are large enough to hold text [{ x, y, w, h }]
+     ocr       reading the pictures → { state: 'none' | 'run' | 'done' · lines: Map page → lines that were read
+                                        stop: the user asked to stop · at: the page being read · note: what to show meanwhile }
+     find      the search, or null → { q: what is looked for · hits: [{ no: page, x, y, w, h: the box to select, ocr: it was read }]
+                                       at: the hit shown last (−1: none yet) · done: every page has been looked at
+                                       pages: how many have · repl: the replacement typed for a hit, offered for the next }
+   A hit counts as edited when an applied edit overlaps it (findEdited); nothing else is kept about it.
+   ===================================================================== */
 const findCtx = () => S.pdf || S.pic;         // what is being searched: the open PDF, or the open picture
 const findNew = pic => ({ isPic: pic, n: 1, cur: 1, lines: new Map(), imgs: new Map(), find: null, ocr: { state: 'none', lines: new Map(), stop: false, at: 0, note: '' } });
+/* a character as it is compared: width and compatibility forms folded, lower case; white space gives nothing */
 const findFold = ch => { let t = ch; try { t = ch.normalize('NFKC'); } catch (e) { t = ch; } return Array.from(t.toLowerCase()).filter(c => c.trim()); };
 /* the text of a page for searching: every line as its characters (spaces left out, case and width folded) with the box of each
    → [{ c: [char], b: Float32Array(x0, x1, y0, y1 …), ocr }] ; lines read from pictures come after the file's own */
@@ -105,6 +122,7 @@ function findLeft() {
   const P = findCtx(), F = P && P.find;
   return F && F.hits.length ? F.hits.filter(h => !findEdited(h)).length : -1;
 }
+/* show the find box as things stand: whether reading the pictures is offered, how far the search is, how many hits are left */
 function findRender() {
   const P = findCtx(), box = $('findBox');
   box.hidden = !P || BUILD !== 'pages' || (P.isPic && !S.img);
