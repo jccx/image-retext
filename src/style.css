@@ -270,3 +270,5 @@ input[type="range"] { accent-color: var(--accent); min-width: 0; }
 .find-info { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .find-info b { color: var(--ink); font-weight: 600; }
 .find-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.find-in input:disabled { opacity: .55; }
+.ocr-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--muted); }

@@ -78,7 +78,8 @@ async function openPdf(blob, name) {
   if (S.pdf) pdfDestroy(S.pdf.doc);
   if (S.edit) dropEdit();
   pdfDropFonts();
-  S.pdf = { name: (name || 'document').replace(/\.pdf$/i, ''), bytes, doc, lib, n: doc.numPages, cur: 0, pages: new Map(), busy: false, pw, fonts: new Map(), lines: new Map(), find: null };
+  S.pdf = Object.assign({ name: (name || 'document').replace(/\.pdf$/i, ''), bytes, doc, lib, n: doc.numPages, cur: 0, pages: new Map(), busy: false, pw, fonts: new Map() }, findNew(false));
+  S.pdf.n = doc.numPages; S.pdf.cur = 0; S.pic = null;
   PDFS.out = null;
   $('findIn').value = ''; pdfFindInfo();
   await pdfGo(1);
@@ -109,6 +110,7 @@ async function pdfRender(no) {
     const ol = await page.getOperatorList({ annotationMode: lib.AnnotationMode.DISABLE });
     map = pdfGlyphMap(ol, lib.OPS, id => { try { return page.commonObjs.get(id); } catch (e) { return null; } }, vp.transform);
     for (const s of map.shows) pdfNoteFont(P, s.font, s.fo, s.glyphs);
+    pdfNotePics(P, no, map);
   } catch (e) { /* no text information: the page is treated as a picture */ }
   try {
     for (const a of await page.getAnnotations()) {
@@ -158,7 +160,7 @@ async function pdfGo(no) {
 function pdfPager() {
   const P = S.pdf, el = $('pager');
   el.hidden = !P;
-  $('findBox').hidden = !P;
+  pdfFindInfo();
   if (!P) return;
   $('pgNum').textContent = P.cur + ' / ' + P.n;
   $('pgPrev').disabled = P.cur <= 1; $('pgNext').disabled = P.cur >= P.n;
@@ -171,38 +173,87 @@ function pdfClose() {
   pdfPager();
 }
 
-/* ---------- finding a text everywhere in the file, so that no occurrence is missed ---------- */
+/* ---------- finding a text everywhere, so that no occurrence is missed ----------
+   In a PDF the text comes from the file. Text inside pictures and scans, and in a plain picture, is not text yet: the built-in
+   reader reads it once, when the user asks for it, and the lines it could read can then be found like any other. */
+const findCtx = () => S.pdf || S.pic;         // what is being searched: the open PDF, or the open picture
+const findNew = pic => ({ isPic: pic, n: 1, cur: 1, lines: new Map(), imgs: new Map(), find: null, ocr: { state: 'none', lines: new Map(), stop: false, at: 0, note: '' } });
 const pdfFold = ch => { let t = ch; try { t = ch.normalize('NFKC'); } catch (e) { t = ch; } return Array.from(t.toLowerCase()).filter(c => c.trim()); };
-/* the text of a page for searching: every line as its characters (spaces left out, case and width folded) with the box of each → [{ c: [char], b: Float32Array(x0, x1, y0, y1 …) }] */
-async function pdfPageLines(P, no) {
-  if (P.lines.has(no)) return P.lines.get(no);
-  const out = [];
-  try {
-    let map = P.pages.has(no) ? P.pages.get(no).map : null;
-    if (!map) {
-      const page = await P.doc.getPage(no), ol = await page.getOperatorList({ annotationMode: P.lib.AnnotationMode.DISABLE });
-      map = pdfGlyphMap(ol, P.lib.OPS, id => { try { return page.commonObjs.get(id); } catch (e) { return null; } }, pdfViewport(page).transform);
-      if (no !== P.cur) page.cleanup();
-    }
-    for (const L of pdfTextIn(map, { x: -1e9, y: -1e9, w: 2e9, h: 2e9 }).lines) {
-      let c = [], b = [], lastX = null;
-      const flush = () => { if (c.length) out.push({ c, b: Float32Array.from(b) }); c = []; b = []; };
-      for (const g of L.g) {
-        if (Math.abs(g.a[1] - g.b[1]) > 0.2 * g.rec.h) continue;                      // not set along the page: its box would be wrong
-        const x0 = Math.min(g.a[0], g.b[0]), x1 = Math.max(g.a[0], g.b[0]);
-        if (lastX !== null && x0 - lastX > 2.5 * g.rec.h) flush();                    // another column or table cell
-        lastX = x1;
-        for (const ch of pdfFold(String(g.u == null ? '' : g.u))) { c.push(ch); b.push(x0, x1, Math.min(g.t[1], g.d[1]), Math.max(g.t[1], g.d[1])); }
-      }
-      flush();
-    }
-  } catch (e) { /* a page that cannot be read has nothing to find */ }
-  P.lines.set(no, out);
-  return out;
+/* the pictures of a page that are large enough to hold text */
+function pdfNotePics(P, no, map) { P.imgs.set(no, (map.imgs || []).filter(r => r.w >= 60 && r.h >= 24 && r.w * r.h >= 6000)); }
+/* where the glyphs of a page are; a page that is not on screen is worked out and forgotten again (its fonts and pictures are noted) */
+async function pdfPageMap(P, no) {
+  if (P.pages.has(no)) return P.pages.get(no).map;
+  const page = await P.doc.getPage(no), ol = await page.getOperatorList({ annotationMode: P.lib.AnnotationMode.DISABLE });
+  const map = pdfGlyphMap(ol, P.lib.OPS, id => { try { return page.commonObjs.get(id); } catch (e) { return null; } }, pdfViewport(page).transform);
+  for (const s of map.shows) pdfNoteFont(P, s.font, s.fo, s.glyphs);
+  pdfNotePics(P, no, map);
+  if (no !== P.cur) page.cleanup();
+  return map;
 }
-/* look for q on every page → P.find = { q, hits: [{ no, x, y, w, h }], at, done, pages } */
+/* the text of a page for searching: every line as its characters (spaces left out, case and width folded) with the box of each
+   → [{ c: [char], b: Float32Array(x0, x1, y0, y1 …), ocr }] ; lines read from pictures come after the file's own */
+async function pdfPageLines(P, no) {
+  let base = P.lines.get(no);
+  if (!base) {
+    base = [];
+    if (!P.isPic) try {
+      for (const L of pdfTextIn(await pdfPageMap(P, no), { x: -1e9, y: -1e9, w: 2e9, h: 2e9 }).lines) {
+        let c = [], b = [], lastX = null;
+        const flush = () => { if (c.length) base.push({ c, b: Float32Array.from(b) }); c = []; b = []; };
+        for (const g of L.g) {
+          if (Math.abs(g.a[1] - g.b[1]) > 0.2 * g.rec.h) continue;                      // not set along the page: its box would be wrong
+          const x0 = Math.min(g.a[0], g.b[0]), x1 = Math.max(g.a[0], g.b[0]);
+          if (lastX !== null && x0 - lastX > 2.5 * g.rec.h) flush();                    // another column or table cell
+          lastX = x1;
+          for (const ch of pdfFold(String(g.u == null ? '' : g.u))) { c.push(ch); b.push(x0, x1, Math.min(g.t[1], g.d[1]), Math.max(g.t[1], g.d[1])); }
+        }
+        flush();
+      }
+    } catch (e) { /* a page that cannot be read has nothing to find */ }
+    P.lines.set(no, base);
+  }
+  const more = P.ocr.lines.get(no);
+  return more && more.length ? base.concat(more) : base;
+}
+/* read the text in the pictures, once: every page of the PDF that has pictures, or the open picture. A second press while it runs stops it. */
+async function pdfOcrRun() {
+  const P = findCtx();
+  if (!P) return;
+  const O = P.ocr;
+  if (O.state === 'run') { O.stop = true; return; }
+  O.state = 'run'; O.stop = false; O.at = 0; O.note = '';
+  pdfFindInfo();
+  const ok = await ocrLoad(t => { O.note = t; pdfFindInfo(); });
+  if (findCtx() !== P) return;
+  O.note = '';
+  if (!ok) { O.state = 'none'; pdfFindInfo(); toast('识别没能启动，请再试一次'); return; }
+  for (let no = 1; no <= P.n && !O.stop; no++) {
+    if (O.lines.has(no)) continue;
+    let ctx = S.ictx, W = S.iw, H = S.ih, areas = null, base = [];
+    if (!P.isPic) {
+      base = await pdfPageLines(P, no);
+      areas = P.imgs.get(no) || [];
+      if (findCtx() !== P) return;
+      if (!areas.length) { O.lines.set(no, []); continue; }
+      if (no !== P.cur) { const page = await P.doc.getPage(no), c = await pdfDrawPage(page, pdfViewport(page)); ctx = c.getContext('2d', { willReadFrequently: true }); W = c.width; H = c.height; }
+    }
+    O.at = no;
+    pdfFindInfo();
+    await tick();
+    /* a line where the file has text of its own needs no reading (a scan that comes with a text layer) */
+    const skip = r => base.some(L => { for (let j = 0; j < L.c.length; j++) { const cx = (L.b[4 * j] + L.b[4 * j + 1]) / 2, cy = (L.b[4 * j + 2] + L.b[4 * j + 3]) / 2; if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) return true; } return false; });
+    const lines = await ocrPage(ctx, W, H, areas, skip, async () => { await tick(); return findCtx() === P && !O.stop; }, pdfFold);
+    if (findCtx() !== P) return;
+    if (lines) O.lines.set(no, lines);
+  }
+  O.state = O.stop ? 'none' : 'done'; O.stop = false; O.at = 0;
+  if (P.find) { const q = P.find.q, repl = P.find.repl; await pdfFind(q); if (findCtx() === P && P.find) P.find.repl = repl; }
+  pdfFindInfo();
+}
+/* look for q on every page → P.find = { q, hits: [{ no, x, y, w, h, ocr }], at, done, pages, repl } */
 async function pdfFind(q) {
-  const P = S.pdf;
+  const P = findCtx();
   if (!P) return;
   const want = Array.from(q || '').reduce((a, ch) => a.concat(pdfFold(ch)), []);
   if (!want.length) { P.find = null; pdfFindInfo(); return; }
@@ -210,7 +261,7 @@ async function pdfFind(q) {
   pdfFindInfo();
   for (let no = 1; no <= P.n; no++) {
     const lines = await pdfPageLines(P, no);
-    if (S.pdf !== P || P.find !== F) return;
+    if (findCtx() !== P || P.find !== F) return;
     for (const L of lines) {
       for (let i = 0; i + want.length <= L.c.length; i++) {
         let k = 0;
@@ -218,8 +269,9 @@ async function pdfFind(q) {
         if (k < want.length) continue;
         let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
         for (let j = i; j < i + k; j++) { x0 = Math.min(x0, L.b[4 * j]); x1 = Math.max(x1, L.b[4 * j + 1]); y0 = Math.min(y0, L.b[4 * j + 2]); y1 = Math.max(y1, L.b[4 * j + 3]); }
-        const h = y1 - y0;
-        F.hits.push({ no, x: x0 - 0.05 * h, y: y0 - 0.02 * h, w: x1 - x0 + 0.1 * h, h: h * 1.04 });
+        /* the box to select: a little room around the characters (more around read ones, whose boxes hug the ink) */
+        const h = y1 - y0, px = (L.ocr ? 0.14 : 0.05) * h, py = (L.ocr ? 0.2 : 0.02) * h;
+        F.hits.push({ no, x: x0 - px, y: y0 - py, w: x1 - x0 + 2 * px, h: h + 2 * py, ocr: !!L.ocr });
         i += k - 1;
       }
     }
@@ -231,41 +283,60 @@ async function pdfFind(q) {
 }
 /* has this occurrence been edited already? */
 function pdfFindDone(h) {
-  const P = S.pdf, pg = P.pages.get(h.no);
-  const eds = h.no === P.cur ? S.undo.map(u => (u.pdf ? u.pdf.sel : { x: u.x, y: u.y, w: u.after.width, h: u.after.height })) : pg ? pg.edits.map(e => (e.pdf ? e.pdf.sel : e)) : [];
+  const P = findCtx(), pg = P.isPic ? null : P.pages.get(h.no);
+  const eds = P.isPic || h.no === P.cur ? S.undo.map(u => (u.pdf ? u.pdf.sel : { x: u.x, y: u.y, w: u.after.width, h: u.after.height })) : pg ? pg.edits.map(e => (e.pdf ? e.pdf.sel : e)) : [];
   return eds.some(e => pdfHit(h, e));
 }
 /* how many occurrences are still to be edited (−1: nothing is being looked for) */
 function pdfFindLeft() {
-  const P = S.pdf, F = P && P.find;
+  const P = findCtx(), F = P && P.find;
   return F && F.hits.length ? F.hits.filter(h => !pdfFindDone(h)).length : -1;
 }
 function pdfFindInfo() {
-  const P = S.pdf, F = P && P.find, info = $('findInfo');
+  const P = findCtx(), box = $('findBox');
+  box.hidden = !P || BUILD !== 'pages' || (P.isPic && (S.demo || !S.img));
+  if (box.hidden) return;
+  const F = P.find, O = P.ocr, pic = P.isPic, info = $('findInfo'), few = a => (a.length > 8 ? a.slice(0, 8).join('、') + '…' : a.join('、'));
+  /* reading the pictures is offered once, and only where there are pictures */
+  const picPages = pic ? [1] : [...P.imgs.entries()].filter(e => e[1].length).map(e => e[0]).sort((a, b) => a - b), offer = O.state !== 'done' && picPages.length > 0;
+  $('ocrRow').hidden = !offer;
+  if (offer) {
+    $('ocrGo').textContent = O.state === 'run' ? '停止' : '识别图片里的文字';
+    $('ocrNote').textContent = O.state === 'run' ? O.note || (pic ? '正在识别图片里的文字…' : '正在识别第 ' + (O.at || picPages[0]) + ' 页的图片…') :
+      pic ? '图片里的字要先识别一次，才能查找。' : '第 ' + few(picPages) + ' 页有图片或扫描内容，里面的字要先识别一次，才能查到。';
+  }
+  $('findIn').placeholder = pic ? '查找图片里的文字' : '查找这份 PDF 里的文字';
+  $('findIn').disabled = $('findGo').disabled = pic && O.state !== 'done';
   $('findNav').hidden = !(F && F.hits.length);
   info.hidden = !F;
   if (!F) return;
   const n = F.hits.length, left = pdfFindLeft();
-  if (!n) { info.textContent = F.done ? '没有找到“' + F.q + '”。扫描件和图片里的字查不到，跨行的词句也查不到。' : '正在查找… 已查 ' + F.pages + ' / ' + P.n + ' 页'; return; }
+  if (!n) {
+    info.textContent = !F.done ? '正在查找… 已查 ' + F.pages + ' / ' + P.n + ' 页' : '没有找到“' + F.q + '”。' +
+      (offer ? '图片和扫描页里的字，要先点下面的“识别图片里的文字”。' : pic || O.state === 'done' ? '识别不出来的字（手写、艺术字、太模糊的）查不到，跨行的词句也查不到。' : '跨行的词句查不到。');
+    return;
+  }
   const pages = [...new Set(F.hits.map(h => h.no))];
   info.innerHTML = '';
   const b = document.createElement('b');
   b.textContent = (F.done ? '共 ' : '已找到 ') + n + ' 处';
-  info.append(b, '（第 ' + (pages.length > 8 ? pages.slice(0, 8).join('、') + '… ' : pages.join('、') + ' ') + '页）' + (F.done ? '' : '，还在查 ' + F.pages + ' / ' + P.n + ' 页') + '。' +
-    (left === n ? '都还没改。' : left > 0 ? '已改 ' + (n - left) + ' 处，还剩 ' + left + ' 处。' : '全部改过了。') + (F.at >= 0 ? ' 现在是第 ' + (F.at + 1) + ' 处。' : ''));
+  info.append(b, (pic ? '' : '（第 ' + few(pages) + ' 页）') + (F.done ? '' : '，还在查 ' + F.pages + ' / ' + P.n + ' 页') + '。' +
+    (left === n ? '都还没改。' : left > 0 ? '已改 ' + (n - left) + ' 处，还剩 ' + left + ' 处。' : '全部改过了。') + (F.at >= 0 ? ' 现在是第 ' + (F.at + 1) + ' 处。' : '') +
+    (F.hits.some(h => h.ocr) || (O.state === 'done' && [...O.lines.values()].some(l => l.length)) ? ' 图片里的字是识别出来的，可能有错漏，请再人工核对一遍。' : '') +
+    (offer && !pic ? ' 图片和扫描页还没识别。' : ''));
   $('findNext').textContent = left > 0 ? '下一处' : '再看一遍';
 }
 /* go to the next occurrence that has not been edited (when all have been: just the next one) and select it */
 async function pdfFindStep(dir) {
-  const P = S.pdf, F = P && P.find;
+  const P = findCtx(), F = P && P.find;
   if (!F || !F.hits.length || P.busy) return;
   const n = F.hits.length, any = F.hits.some(h => !pdfFindDone(h));
   let i = F.at < 0 ? (dir > 0 ? -1 : 0) : F.at;
   for (let k = 0; k < n; k++) { i = (i + dir + n) % n; if (!any || !pdfFindDone(F.hits[i])) break; }
   const h = F.hits[i];
   F.at = i;
-  if (P.cur !== h.no) await pdfGo(h.no);
-  if (S.pdf !== P || P.cur !== h.no) return;
+  if (!P.isPic && P.cur !== h.no) await pdfGo(h.no);
+  if (findCtx() !== P || (!P.isPic && P.cur !== h.no)) return;
   PDFS.findHit = h;
   startEdit({ x: h.x, y: h.y, w: h.w, h: h.h }, false);
   PDFS.findHit = null;
@@ -274,12 +345,12 @@ async function pdfFindStep(dir) {
 }
 /* the replacement typed for an earlier occurrence, offered again for this one */
 function pdfFindRepl(ed) {
-  const F = S.pdf && S.pdf.find;
+  const P = findCtx(), F = P && P.find;
   return ed.find && F && F.repl && !pdfFindDone(ed.find) ? F.repl : '';
 }
 /* an edit was applied: remember its text for the next occurrence → how many occurrences are left (−1 when nothing is being looked for) */
 function pdfFindApplied(ed, mode) {
-  const P = S.pdf, F = P && P.find;
+  const P = findCtx(), F = P && P.find;
   if (!F) return -1;
   if (ed.find && mode === 'text' && ed.newText.trim() && ed.newText !== ed.origText) F.repl = ed.newText;
   pdfFindInfo();
@@ -341,26 +412,18 @@ function pdfDropFonts() {
   if (S.lastFam && S.lastFam.pdf) S.lastFam = null;
   if (any) buildFamilySelect();
 }
-/* look through the other pages for more characters of the same fonts (a 7 that page 1 lacks may be on page 5) */
+/* look through the other pages (a 7 that page 1 lacks may be on page 5): more characters of the same fonts, which pages
+   have pictures, and the text to search */
 async function pdfScanFonts(P) {
-  const lib = P.lib, OPS = lib.OPS;
   for (let no = 1; no <= Math.min(P.n, 40); no++) {
     await new Promise(r => setTimeout(r, 30));
     if (S.pdf !== P) return;
-    if (P.pages.has(no)) continue;
-    try {
-      const page = await P.doc.getPage(no), ol = await page.getOperatorList({ annotationMode: lib.AnnotationMode.DISABLE }), stack = [];
-      let cur = null;
-      for (let i = 0; i < ol.fnArray.length; i++) {
-        const fn = ol.fnArray[i];
-        if (fn === OPS.setFont) cur = ol.argsArray[i][0];
-        else if (fn === OPS.save || fn === OPS.paintFormXObjectBegin) stack.push(cur);
-        else if (fn === OPS.restore || fn === OPS.paintFormXObjectEnd) { if (stack.length) cur = stack.pop(); }
-        else if (fn === OPS.showText && cur) { let f = null; try { f = page.commonObjs.get(cur); } catch (e) { f = null; } pdfNoteFont(P, cur, f, ol.argsArray[i][0]); }
-      }
-      if (no !== P.cur) page.cleanup();
-    } catch (e) { /* that page adds nothing */ }
+    if (P.lines.has(no)) continue;
+    await pdfPageLines(P, no);
+    if (S.pdf === P && no % 5 === 0) pdfFindInfo();
   }
+  if (S.pdf !== P) return;
+  pdfFindInfo();
   if (PDFS.famDirty) { PDFS.famDirty = false; buildFamilySelect(); }
 }
 /* The PDF's own font draws the new text while it has every character; otherwise the closest library font does, for the whole text. */
@@ -1056,6 +1119,7 @@ function pdfInit() {
   $('findGo').onclick = () => pdfFind($('findIn').value);
   $('findIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('findIn').blur(); pdfFind($('findIn').value); } });
   $('findIn').addEventListener('search', () => { if (!$('findIn').value) pdfFind(''); });
+  $('ocrGo').onclick = () => pdfOcrRun();
   $('findNext').onclick = () => pdfFindStep(1);
   $('findPrev').onclick = () => pdfFindStep(-1);
   for (const el of [$('pgPrev'), $('pgNext'), $('pgNum')]) el.addEventListener('pointerdown', e => e.stopPropagation());

@@ -161,7 +161,28 @@ def repeat():
     c.setFont('Courier', 9); c.drawString(72, 60, 'Harbor Street Studio - page 3 of 3')
     c.showPage(); c.save()
 
-for f in (reportlab_basic, raw_ops, latex, libreoffice, mpl, special, repeat):
+def mixed():
+    """Text of the file next to a picture that has text in it, and the same page as a plain picture: for reading text in pictures."""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.utils import ImageReader
+    from PIL import Image, ImageDraw, ImageFont
+    cjk = subprocess.run(['fc-match', '-f', '%{file}', 'Noto Sans CJK SC'], capture_output=True, text=True).stdout.strip()
+    im = Image.new('RGB', (1200, 420), (238, 244, 250)); d = ImageDraw.Draw(im)
+    d.text((60, 40), 'Warehouse B, Dock 14', font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 64), fill=(20, 40, 80))
+    d.text((60, 150), 'Order 58231 ships on March 9', font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf', 48), fill=(30, 30, 30))
+    d.text((60, 250), '收货地址：湖滨路 88 号', font=ImageFont.truetype(cjk, 56), fill=(120, 20, 20))
+    im.save(os.path.join(OUT, '_label.png'))
+    c = canvas.Canvas(os.path.join(OUT, 'mixed.pdf'), pagesize=letter)
+    c.setFont('Helvetica-Bold', 18); c.drawString(72, 720, 'Shipping notice for Order 58231')
+    c.setFont('Times-Roman', 12); c.drawString(72, 694, 'The label below is a picture. Warehouse staff will check it on arrival.')
+    c.drawImage(ImageReader(os.path.join(OUT, '_label.png')), 72, 520, width=400, height=140)
+    c.showPage()
+    c.setFont('Helvetica', 12); c.drawString(72, 720, 'Second page, text only: Order 58231 again.')
+    c.showPage(); c.save()
+    subprocess.run(['pdftoppm', '-r', '150', '-f', '1', '-l', '1', '-singlefile', '-png', os.path.join(OUT, 'mixed.pdf'), os.path.join(OUT, 'mixed-page')], capture_output=True)
+
+for f in (reportlab_basic, raw_ops, latex, libreoffice, mpl, special, repeat, mixed):
     try: f()
     except Exception as e: print(f.__name__, 'failed:', e)
 print(sorted(x for x in os.listdir(OUT) if x.endswith('.pdf')))

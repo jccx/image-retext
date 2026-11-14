@@ -15,7 +15,9 @@ const pdfPt = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[
    → { shows: [{ k, top, i, font, name, size, … , g: [glyph] }], nTop }
    k numbers the text-showing operators of the page's own content stream in order (−1 inside a form XObject). */
 function pdfGlyphMap(ol, OPS, getFont, base) {
-  const fn = ol.fnArray, args = ol.argsArray, shows = [], stack = [];
+  const fn = ol.fnArray, args = ol.argsArray, shows = [], stack = [], imgs = [];
+  /* pictures placed on the page (a picture fills the unit square of the space it is painted in): text inside them is not text of the file */
+  const PIC = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject, OPS.paintJpegXObject, OPS.paintImageXObjectRepeat].filter(v => v != null));
   let ctm = base.slice(), depth = 0, k = 0;
   let st = { tm: null, x: 0, y: 0, lx: 0, ly: 0, tc: 0, tw: 0, hs: 1, lead: 0, rise: 0, font: null, fobj: null, size: 0, dir: 1, fm0: 0.001, mode: 0 };
   for (let i = 0; i < fn.length; i++) {
@@ -67,10 +69,15 @@ function pdfGlyphMap(ol, OPS, getFont, base) {
         st.x += x * hs;
         break;
       }
-      default: break;
+      default:
+        if (PIC.has(fn[i])) {
+          const c = [pdfPt(ctm, 0, 0), pdfPt(ctm, 1, 0), pdfPt(ctm, 0, 1), pdfPt(ctm, 1, 1)], xs = c.map(p => p[0]), ys = c.map(p => p[1]);
+          imgs.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+        }
+        break;
     }
   }
-  return { shows, nTop: k };
+  return { shows, nTop: k, imgs };
 }
 
 /* glyphs whose middle lies in the rectangle (picture pixels) */

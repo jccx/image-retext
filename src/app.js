@@ -185,7 +185,7 @@ const S = {
   img: null, ictx: null, iw: 0, ih: 0, name: 'image', type: 'image/png', demo: false,
   view: { s: 1, tx: 0, ty: 0 }, vw: 0, vh: 0, dpr: 1,
   edit: null, undo: [], drag: null, pointers: new Map(), pinch: null, space: false,
-  sample: null, downloads: null, lastFam: null, comparing: false, pdf: null
+  sample: null, downloads: null, lastFam: null, comparing: false, pdf: null, pic: null
 };
 const stage = $('stage'), vcan = $('view'), vctx = vcan.getContext('2d'), selEl = $('sel');
 
@@ -278,6 +278,9 @@ function setImage(c, x, name, type, demo) {
   S.img = c; S.ictx = x; S.iw = c.width; S.ih = c.height; S.name = name.replace(/\.[^.]+$/, ''); S.type = type; S.demo = demo;
   S.undo = []; $('btnUndo').disabled = true;
   $('stageNote').textContent = demo ? '示例图片 · 拖一个框，框住任意一处文字试试' : '';
+  /* a picture of its own (not a page of a PDF) starts with nothing read and nothing looked for */
+  if (!S.pdf) { S.pic = findNew(true); $('findIn').value = ''; }
+  pdfFindInfo();
   fitView();
 }
 
@@ -1277,6 +1280,8 @@ async function save() {
   $('sheetTitle').textContent = '保存图片'; $('saveNote').textContent = '修改后的图片请合法使用，后果由使用者自负。'; $('sheetHow').textContent = '长按下面的图片选“存储到照片”；电脑上右键选“图片另存为”。';
   $('pdfOpts').hidden = true; $('sheetImg').parentElement.hidden = false; $('sheetShare').textContent = '存到相册 / 分享'; $('sheetLink').textContent = '直接下载';
   if (S.edit && S.edit.live) commit('text', true);
+  const findLeft = pdfFindLeft();
+  if (findLeft > 0) $('saveNote').textContent += ' 提醒：查找的“' + S.pic.find.q + '”还有 ' + findLeft + ' 处没改。';
   const jpg = S.type === 'image/jpeg';
   const blob = await new Promise(res => S.img.toBlob(res, S.type, jpg ? 0.95 : undefined));
   if (!blob) { toast('生成图片失败'); return; }

@@ -4,7 +4,7 @@
 // Fonts for docs/ are prepared by build_site.js (run it once, or after font changes).
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const rd = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-const FINE_PAGES = '双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片只在你的设备上处理，不会上传。原文字由页面自带的识别读出：常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。也可以打开 PDF：一页一页地改，原文字直接取自 PDF，保存时新文字作为真正的文字写回 PDF，其它内容不变；同一个词要改多处时，用上面的“查找”逐处改，不会漏。';
+const FINE_PAGES = '双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片只在你的设备上处理，不会上传。原文字由页面自带的识别读出：常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。也可以打开 PDF：一页一页地改，原文字直接取自 PDF，保存时新文字作为真正的文字写回 PDF，其它内容不变；同一个词要改多处时，用上面的“查找”逐处改，不会漏；图片和扫描页里的字，先点“识别图片里的文字”再查找。';
 function build(target) {
   const pages = target === 'pages';
   let html = rd('index.html');
