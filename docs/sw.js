@@ -3,7 +3,7 @@
    - Fonts: answered from the downloaded packs (Cache Storage "overwrite-fonts") when present, otherwise from the network.
    - A new version is fetched in the background and used from the next launch.
    - What the app stored under its former name (retext-…) is removed: those copies belong to the old address. */
-const VERSION = '9dbaecb2ef';
+const VERSION = 'eecd5951d2';
 const SHELL = 'overwrite-shell-' + VERSION, FONTS = 'overwrite-fonts';
 const SHELL_FILES = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","fonts/packs.json","fonts/ibm-plex-mono/ibm-plex-mono.css","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2","fonts/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2","pdf/pdf.min.js","pdf/pdf.worker.min.js","pdf/pdf-lib.min.js","pdf/fontkit.umd.min.js"];
 self.addEventListener('install', e => {

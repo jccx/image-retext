@@ -16,7 +16,7 @@ function build(target) {
   if (pages) {
     html = html.replace('/*__UIFONT__*/', 'fonts/ibm-plex-mono/ibm-plex-mono.css')
       .replace('<!--__PWA_HEAD__-->', ['<meta name="description" content="框住图片里的文字，换成新文字，字体、颜色、位置保持一致。在设备上处理，可离线使用。">',
-        '<meta name="theme-color" content="#c2006a">', '<link rel="manifest" href="manifest.webmanifest">', '<link rel="icon" href="icons/icon-192.png">',
+        '<meta name="theme-color" content="#b45309">', '<link rel="manifest" href="manifest.webmanifest">', '<link rel="icon" href="icons/icon-192.png">',
         '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">', '<meta name="apple-mobile-web-app-capable" content="yes">',
         '<meta name="mobile-web-app-capable" content="yes">', '<meta name="apple-mobile-web-app-title" content="查缺补漏">',
         '<meta name="apple-mobile-web-app-status-bar-style" content="default">'].join('\n'));
@@ -39,7 +39,7 @@ function build(target) {
     fs.writeFileSync(path.join(out, 'manifest.webmanifest'), JSON.stringify({
       name: '查缺补漏', short_name: '查缺补漏', description: '框住图片或 PDF 里的文字，换成新文字，字体、颜色、位置保持一致。',
       lang: 'zh-CN', start_url: './', scope: './', display: 'standalone', orientation: 'any',
-      background_color: '#f3f4f6', theme_color: '#c2006a',
+      background_color: '#f3f4f6', theme_color: '#b45309',
       icons: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
         { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }]
     }, null, 2));
