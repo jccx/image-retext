@@ -23,13 +23,13 @@ async function openPdf(blob, name) {
   if (S.pdf) pdfDestroy(S.pdf.doc);
   if (S.edit) dropEdit();
   pdfDropFonts();
-  S.pdf = Object.assign({ name: (name || 'document').replace(/\.pdf$/i, ''), bytes, doc, lib, n: doc.numPages, cur: 0, pages: new Map(), busy: false, pw, fonts: new Map() }, findNew(false));
-  S.pdf.n = doc.numPages; S.pdf.cur = 0; S.pic = null;
+  S.pdf = Object.assign(findNew(false), { name: (name || 'document').replace(/\.pdf$/i, ''), bytes, doc, lib, n: doc.numPages, cur: 0, pages: new Map(), busy: false, pw, fonts: new Map() });
+  S.pic = null;
   PDFS.out = null;
-  $('findIn').value = ''; pdfFindInfo();
+  $('findIn').value = ''; findRender();
   await pdfGo(1);
   warmReader();
-  pdfScanFonts(S.pdf);
+  pdfScanPages(S.pdf);
 }
 
 /* the size a page is drawn at: three picture pixels per PDF point (216 dpi) where the page allows it; phones cap the size of a canvas */
@@ -66,6 +66,18 @@ async function pdfRender(no) {
   } catch (e) { annots = []; }
   return { c, x, vp, map, annots };
 }
+/* the pictures of a page that are large enough to hold text */
+function pdfNotePics(P, no, map) { P.imgs.set(no, (map.imgs || []).filter(r => r.w >= 60 && r.h >= 24 && r.w * r.h >= 6000)); }
+/* where the glyphs of a page are; a page that is not on screen is worked out and forgotten again (its fonts and pictures are noted) */
+async function pdfPageMap(P, no) {
+  if (P.pages.has(no)) return P.pages.get(no).map;
+  const page = await P.doc.getPage(no), ol = await page.getOperatorList({ annotationMode: P.lib.AnnotationMode.DISABLE });
+  const map = pdfGlyphMap(ol, P.lib.OPS, id => { try { return page.commonObjs.get(id); } catch (e) { return null; } }, pdfViewport(page).transform);
+  for (const s of map.shows) pdfNoteFont(P, s.font, s.fo, s.glyphs);
+  pdfNotePics(P, no, map);
+  if (no !== P.cur) page.cleanup();
+  return map;
+}
 
 /* keep the edits of the page being left, so they can be put back and written out later */
 function pdfStash() {
@@ -97,7 +109,7 @@ async function pdfGo(no) {
     pdfApplyEdits(S.ictx, pg.edits, S.undo);
     $('btnUndo').disabled = !S.undo.length;
     PDFS.out = null;
-    pdfFindInfo();
+    findRender();
     requestDraw();
   } catch (e) { toast('第 ' + no + ' 页没能显示出来'); }
   finally { P.busy = false; pdfPager(); if ($('stageNote').textContent.startsWith('正在打开')) $('stageNote').textContent = ''; }
@@ -105,7 +117,7 @@ async function pdfGo(no) {
 function pdfPager() {
   const P = S.pdf, el = $('pager');
   el.hidden = !P;
-  pdfFindInfo();
+  findRender();
   if (!P) return;
   $('pgNum').textContent = P.cur + ' / ' + P.n;
   $('pgPrev').disabled = P.cur <= 1; $('pgNext').disabled = P.cur >= P.n;
@@ -114,6 +126,20 @@ function pdfClose() {
   if (S.pdf) pdfDestroy(S.pdf.doc);
   pdfDropFonts();
   S.pdf = null; PDFS.out = null;
-  $('findIn').value = ''; pdfFindInfo();
+  $('findIn').value = ''; findRender();
   pdfPager();
+}
+/* look through the other pages (a 7 that page 1 lacks may be on page 5): more characters of the same fonts, which pages
+   have pictures, and the text to search */
+async function pdfScanPages(P) {
+  for (let no = 1; no <= Math.min(P.n, 40); no++) {
+    await new Promise(r => setTimeout(r, 30));
+    if (S.pdf !== P) return;
+    if (P.lines.has(no)) continue;
+    await findLines(P, no);
+    if (S.pdf === P && no % 5 === 0) findRender();
+  }
+  if (S.pdf !== P) return;
+  findRender();
+  if (PDFS.famDirty) { PDFS.famDirty = false; buildFamilySelect(); }
 }

@@ -5,7 +5,6 @@ const OFF = { cache: 'overwrite-fonts', busy: null, sel: { latin: true, sc: true
 const offKey = 'overwrite.offline';
 function offState() { try { return JSON.parse(localStorage.getItem(offKey)) || { mode: 'online', packs: {} }; } catch (e) { return { mode: 'online', packs: {} }; } }
 function offSave(st) { try { localStorage.setItem(offKey, JSON.stringify(st)); } catch (e) { /* private mode: state lives for this visit only */ } }
-const mb = b => (b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.max(0.1, b / 1e6).toFixed(b >= 1e8 ? 0 : 1) + ' MB');
 function offLabel() {
   const st = offState(), have = Object.keys(FONT_PACKS).filter(k => st.packs[k] === 'done');
   if (st.mode !== 'offline' || !have.length) return '在线加载';
@@ -127,5 +126,3 @@ function offInit() {
   $('offGo').onclick = () => { if (OFF.busy) OFF.busy.stop.v = true; else offDownload(); };
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
-offInit();
-pdfInit();

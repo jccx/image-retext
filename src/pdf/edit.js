@@ -1,3 +1,16 @@
+/* the text under a selection, straight from the PDF → { text, hint, fam } or null when the page has no usable text there */
+function pdfReadEdit(ed) {
+  const P = S.pdf, pg = P && P.pages.get(P.cur);
+  if (!pg) return null;
+  if (pdfTouched(ed.userRect)) return null;        // an earlier edit changed this spot: the file's text no longer describes it
+  const r = pdfTextIn(pg.map, ed.userRect);
+  if (!r.text || r.bad) return null;
+  /* one font for the whole selection: that font itself can be tried */
+  const ids = new Set();
+  for (const g of pdfGlyphsIn(pg.map, ed.userRect)) if (String(g.u || '').trim()) ids.add(g.rec.font);
+  if (PDFS.famDirty) { PDFS.famDirty = false; buildFamilySelect(); }
+  return { text: r.text, hint: pdfFontHint(r.fonts[0]), fam: ids.size === 1 ? P.fonts.get([...ids][0]) || null : null, lines: r.lines };
+}
 /* ---------- what an edit did, kept with it for saving ---------- */
 const pdfHit = (a, b) => !!a && !!b && a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 /* has an earlier edit of this page changed what lies in r? */

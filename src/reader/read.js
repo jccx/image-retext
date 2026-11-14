@@ -15,15 +15,6 @@ function ocrReadLines(an, bands) {
   return { text: lines.join('\n'), conf, maybe: lines.length === 1 ? maybe[0] : [], slots: lines.length === 1 ? slots[0] : [] };
 }
 const OCR_MIN = 0.72;
-/* read the selection on the device; null when the reader cannot run */
-async function readLocal(ed) {
-  const ok = await ocrLoad(t => { if (S.edit === ed) setStatus(t); });
-  if (!ok || S.edit !== ed) return null;
-  setStatus('正在读出框里的文字…');
-  await tick(); await tick();
-  if (S.edit !== ed) return null;
-  return ocrReadLines(ed.an, ed.bands);
-}
 
 /* =====================================================================
    A whole picture: where its lines of text are, and what they say.

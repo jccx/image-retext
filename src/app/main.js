@@ -1,5 +1,8 @@
 /* ---------- boot ---------- */
 function boot() {
+  /* every part of the page wires its own buttons and keys */
+  inputsInit(); pointerInit(); controlsInit(); saveInit(); shortcutsInit();
+  offInit(); pdfInit(); findInit();
   detectSystemFonts();
   new ResizeObserver(resizeView).observe(stage);
   resizeView();

@@ -1,3 +1,4 @@
+function setStatus(t, warn) { const el = $('matchStatus'); el.textContent = t || ''; el.classList.toggle('warn', !!warn); }
 /* ---------- panel rendering ---------- */
 function refresh() {
   const ed = S.edit;
@@ -81,5 +82,3 @@ function buildFamilySelect() {
   }
 }
 function autoRows(t) { t.rows = clamp(t.value.split('\n').length, 1, 4); }
-let toastTimer = 0;
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200); }

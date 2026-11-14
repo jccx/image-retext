@@ -2,25 +2,32 @@
 //   dist/index.html   the Claude artifact (fonts from Google Fonts; Claude reads the original text when available)
 //   docs/             the GitHub Pages / installable version (fonts hosted alongside, offline packs, service worker)
 // Fonts for docs/ are prepared by build_site.js (run it once, or after font changes).
-const fs = require('fs'), path = require('path'), crypto = require('crypto');
+const fs = require('fs'), path = require('path'), crypto = require('crypto'), vm = require('vm');
 const rd = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-/* The app's script: these files, one after another, in one inline script (see ARCHITECTURE.md). */
+/* The app's script is these files, one after another, in a single inline script: they share one scope and call each other freely.
+   The order only matters for what runs while the page loads: generated data first, then the files that declare what others
+   need at once, and app/main.js, which starts everything, last. See ARCHITECTURE.md; tools/modules.js checks the rules. */
 const GENERATED = ['fontdb.gen.js', 'selffonts.gen.js', 'hanzi.gen.js', 'latin.gen.js'];      // data, written by gen_fontdb.js, build_site.js and train/
 const MODULES = [
-  'image/pixels.js', 'image/analyze.js', 'image/typeset.js', 'image/fontfit.js', 'image/render.js',
-  'hanzi.gen.js', 'latin.gen.js',
+  'base.js',
+  'image/pixels.js', 'image/analyze.js', 'image/typeset.js', 'image/fontfit.js',
   'reader/models.js', 'reader/classify.js', 'reader/line.js', 'reader/variants.js', 'reader/read.js',
-  'pdf/core.js', 'pdf/libs.js', 'pdf/pages.js', 'app/find.js', 'pdf/fonts.js', 'pdf/edit.js', 'pdf/write.js', 'pdf/build.js', 'pdf/save.js',
-  'app/util.js', 'app/families.js', 'app/webfonts.js', 'app/state.js', 'app/view.js', 'app/load.js', 'app/edit.js', 'app/layout.js', 'app/apply.js', 'app/match.js',
-  'app/panel.js', 'app/inputs.js', 'app/read.js', 'app/pointer.js', 'app/controls.js', 'app/save.js', 'app/shortcuts.js', 'app/offline.js', 'app/demo.js', 'app/main.js'
+  'pdf/core.js',
+  'app/util.js', 'app/state.js', 'app/families.js', 'app/webfonts.js', 'app/view.js', 'app/panel.js', 'app/load.js', 'app/edit.js', 'app/layout.js', 'app/apply.js', 'app/match.js',
+  'app/inputs.js', 'app/read.js', 'app/pointer.js', 'app/controls.js', 'app/save.js', 'app/shortcuts.js', 'app/offline.js', 'app/find.js', 'app/demo.js',
+  'pdf/libs.js', 'pdf/pages.js', 'pdf/fonts.js', 'pdf/edit.js', 'pdf/write.js', 'pdf/build.js', 'pdf/save.js',
+  'app/main.js'
 ];
 const FINE_PAGES = '双指缩放和移动图片；电脑上滚轮缩放，按住空格拖动。图片只在你的设备上处理，不会上传。原文字由页面自带的识别读出：常见的黑体、宋体和英文印刷体能读，手写体、艺术字读不准时请手动输入。也可以打开 PDF：一页一页地改，原文字直接取自 PDF，保存时新文字作为真正的文字写回 PDF，其它内容不变；同一个词要改多处时，用上面的“查找”逐处改，不会漏；图片和扫描页里的字，先点“识别图片里的文字”再查找。';
 function build(target) {
   const pages = target === 'pages';
   let html = rd('index.html');
-  const js = "'use strict';\nconst BUILD = '" + target + "';\n" + rd('fontdb.gen.js') + '\n' +
-    (pages ? rd('selffonts.gen.js') + '\nFONT_PACKS.pdf = ' + JSON.stringify(Object.assign(pdfPack(), { files: undefined })) + ';' : 'const SELF_FONTS = {}, FONT_PACKS = {};') + '\n' +
-    MODULES.map(rd).join('\n');
+  /* the fonts the site hosts and its offline packs exist only in the installable build; the artifact has neither */
+  const hosted = pages ? rd('selffonts.gen.js') + '\nFONT_PACKS.pdf = ' + JSON.stringify(Object.assign(pdfPack(), { files: undefined })) + ';' : 'const SELF_FONTS = {}, FONT_PACKS = {};';
+  const parts = [['build.js', "'use strict';"], ['build.js', "const BUILD = '" + target + "';"], ['fontdb.gen.js', rd('fontdb.gen.js')], [pages ? 'selffonts.gen.js' : 'build.js', hosted],
+    ['hanzi.gen.js', rd('hanzi.gen.js')], ['latin.gen.js', rd('latin.gen.js')], ...MODULES.map(f => [f, rd(f)])];
+  const js = parts.map(p => p[1]).join('\n');
+  compiles(parts, js);
   if (/<\/script/i.test(js)) throw new Error('script close tag inside JS');
   html = html.replace('/*__CSS__*/', () => rd('style.css')).replace('/*__JS__*/', () => js);
   if (pages) {
@@ -56,6 +63,18 @@ function build(target) {
     fs.writeFileSync(path.join(out, '.nojekyll'), '');
     console.log('docs/index.html', (html.length / 1024).toFixed(1) + ' KB, version', ver);
   } else console.log('dist/index.html', (html.length / 1024).toFixed(1) + ' KB');
+}
+/* One slip stops the whole page, because all the files are one script: a syntax error, or a name declared with const or let
+   in two files. Both are found here, with the file and line they are in. (Two functions of one name pass: the later one
+   silently wins. tools/modules.js --check finds those, and names that nothing declares.) */
+function compiles(parts, js) {
+  try { new vm.Script(js, { filename: 'app' }); }
+  catch (e) {
+    const m = /(?:^|\n)app:(\d+)/.exec(String(e.stack));
+    let line = m ? +m[1] : 0, where = '';
+    for (const [name, text] of parts) { const n = text.split('\n').length; if (line <= n) { where = 'src/' + name + ':' + line; break; } line -= n; }
+    throw new Error((where ? where + ': ' : '') + e.message);
+  }
 }
 /* PDF support: pdf.js (Apache-2.0), pdf-lib (MIT) and fontkit (MIT), copied from node_modules so the site asks no other host for them.
    The two pdf.js modules get a .js name so that every static host serves them as scripts. */

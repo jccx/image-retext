@@ -1,7 +1,6 @@
 /* ---------- matching ---------- */
 let matchTimer = 0;
 function scheduleMatch(delay) { clearTimeout(matchTimer); matchTimer = setTimeout(() => runMatch(), delay); }
-function setStatus(t, warn) { const el = $('matchStatus'); el.textContent = t || ''; el.classList.toggle('warn', !!warn); }
 const vkey = c => c.fam.n + '|' + c.weight + '|' + (c.italic ? 1 : 0);
 
 async function runMatch() {

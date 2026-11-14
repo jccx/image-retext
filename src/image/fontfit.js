@@ -1,19 +1,3 @@
-/* ink metrics of `text` in candidate c, per 1px of font size.
-   With nRuns > 1 and exactly that many words in the text, every word is measured on its own (see wordRuns). */
-function inkMetrics(c, text, nRuns) {
-  const ctx = mctx(8, 8);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.font = fontCss(c, REF);
-  const m = ctx.measureText(encT(c.fam, text));
-  const mk = (t, mm) => ({ text: t, L: mm.actualBoundingBoxLeft / REF, R: mm.actualBoundingBoxRight / REF, W: mm.width / REF, n: Array.from(t).length });
-  let runs = null;
-  if (nRuns > 1) { const ws = text.split(/\s+/).filter(Boolean); if (ws.length === nRuns) runs = ws.map(t => mk(t, ctx.measureText(encT(c.fam, t)))); }
-  if (!runs) runs = [mk(text, m)];
-  let inkW = 0, gaps = 0;
-  for (const r of runs) { inkW += r.L + r.R; gaps += r.n - 1; }
-  return { L: m.actualBoundingBoxLeft / REF, R: m.actualBoundingBoxRight / REF, A: m.actualBoundingBoxAscent / REF, D: m.actualBoundingBoxDescent / REF, W: m.width / REF, n: Array.from(text).length, runs, inkW, gaps };
-}
 const nRunsOf = T => (T.runs ? T.runs.length : 1);
 /* observed ink width the model has to fill: the whole line, or the sum of its words when they are anchored separately */
 function obsWidth(im, T) {
@@ -358,34 +342,3 @@ function placeLine(c, text, T, pxFull, trEm) {
   return { ox: (xs0[0] + bx) / T.kx + T.offX, oy: (oy0 + by) / T.ky + T.offY, iou: best, xs: xs0.map(x => (x + bx) / T.kx + T.offX), words };
 }
 
-/* Observed words of a line: the k widest column gaps split it into k+1 blobs.
-   Returns null unless those gaps clearly stand out from the gaps between letters. */
-function wordRuns(alpha, w, h, band, k) {
-  if (k < 1) return null;
-  const bw = band.x1 - band.x0, cols = new Uint8Array(bw);
-  /* a column counts as inked by its total coverage, so thin strokes (a hyphen, a one-pixel bar) are not lost */
-  const acc = new Float32Array(bw);
-  const peak = new Float32Array(bw);
-  for (let y = band.y0; y < band.y1; y++) { const row = y * w; for (let x = 0; x < bw; x++) { const a = alpha[row + band.x0 + x]; if (a >= 0.12) acc[x] += a; if (a > peak[x]) peak[x] = a; } }
-  for (let x = 0; x < bw; x++) if (acc[x] >= 0.4 || peak[x] >= 0.25) cols[x] = 1;
-  const gaps = [];
-  for (let x = 0; x < bw;) {
-    if (cols[x]) { x++; continue; }
-    let x1 = x;
-    while (x1 < bw && !cols[x1]) x1++;
-    if (x > 0 && x1 < bw) gaps.push({ s: x, e: x1, w: x1 - x });
-    x = x1;
-  }
-  if (gaps.length < k) return null;
-  const sorted = gaps.slice().sort((p, q) => q.w - p.w);
-  const H = band.y1 - band.y0, kth = sorted[k - 1].w, next = sorted[k] ? sorted[k].w : 0;
-  if (kth < Math.max(2, 0.12 * H) || next > 0.8 * kth) return null;
-  const cut = sorted.slice(0, k).sort((p, q) => p.s - q.s);
-  const runs = [];
-  let st = 0;
-  for (const g of cut) { runs.push({ s: band.x0 + st, e: band.x0 + g.s }); st = g.e; }
-  runs.push({ s: band.x0 + st, e: band.x1 });
-  /* ordinary word spacing is roughly 0.35–0.55 of the line's ink height and even; anything else is deliberate layout */
-  const odd = sorted[0].w > 0.8 * H || sorted[0].w > 1.75 * kth;
-  return { runs, odd };
-}

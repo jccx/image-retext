@@ -25,6 +25,6 @@ function setImage(c, x, name, type, demo) {
   $('stageNote').textContent = demo ? '示例图片 · 拖一个框，框住任意一处文字试试' : '';
   /* a picture of its own (not a page of a PDF) starts with nothing read and nothing looked for */
   if (!S.pdf) { S.pic = findNew(true); $('findIn').value = ''; }
-  pdfFindInfo();
+  findRender();
   fitView();
 }

@@ -338,3 +338,34 @@ function estimateSlant(alpha, w, h, band) {
   }
   return best >= 3 && bestS > s0 * 1.012 ? best : 0;     // gentle italics (Lora, Georgia) gain only a little; upright text loses 2% or more at 3°
 }
+/* Observed words of a line: the k widest column gaps split it into k+1 blobs.
+   Returns null unless those gaps clearly stand out from the gaps between letters. */
+function wordRuns(alpha, w, h, band, k) {
+  if (k < 1) return null;
+  const bw = band.x1 - band.x0, cols = new Uint8Array(bw);
+  /* a column counts as inked by its total coverage, so thin strokes (a hyphen, a one-pixel bar) are not lost */
+  const acc = new Float32Array(bw);
+  const peak = new Float32Array(bw);
+  for (let y = band.y0; y < band.y1; y++) { const row = y * w; for (let x = 0; x < bw; x++) { const a = alpha[row + band.x0 + x]; if (a >= 0.12) acc[x] += a; if (a > peak[x]) peak[x] = a; } }
+  for (let x = 0; x < bw; x++) if (acc[x] >= 0.4 || peak[x] >= 0.25) cols[x] = 1;
+  const gaps = [];
+  for (let x = 0; x < bw;) {
+    if (cols[x]) { x++; continue; }
+    let x1 = x;
+    while (x1 < bw && !cols[x1]) x1++;
+    if (x > 0 && x1 < bw) gaps.push({ s: x, e: x1, w: x1 - x });
+    x = x1;
+  }
+  if (gaps.length < k) return null;
+  const sorted = gaps.slice().sort((p, q) => q.w - p.w);
+  const H = band.y1 - band.y0, kth = sorted[k - 1].w, next = sorted[k] ? sorted[k].w : 0;
+  if (kth < Math.max(2, 0.12 * H) || next > 0.8 * kth) return null;
+  const cut = sorted.slice(0, k).sort((p, q) => p.s - q.s);
+  const runs = [];
+  let st = 0;
+  for (const g of cut) { runs.push({ s: band.x0 + st, e: band.x0 + g.s }); st = g.e; }
+  runs.push({ s: band.x0 + st, e: band.x1 });
+  /* ordinary word spacing is roughly 0.35–0.55 of the line's ink height and even; anything else is deliberate layout */
+  const odd = sorted[0].w > 0.8 * H || sorted[0].w > 1.75 * kth;
+  return { runs, odd };
+}

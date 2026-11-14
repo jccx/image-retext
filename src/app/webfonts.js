@@ -7,32 +7,26 @@ function gfSpec(f, noItalic) {
   if (f.w.length === 1 && f.w[0] === 400) return n;
   return n + ':wght@' + f.w.join(';');
 }
-function addCss(specs) {
-  if (BUILD === 'pages') return Promise.resolve(false);     // the installable build contacts no other site; all its fonts are hosted alongside
+/* add a style sheet to the page → true once it has loaded, false when it fails or takes more than 20 seconds */
+function linkCss(href) {
   return new Promise(res => {
     const l = document.createElement('link');
     let done = false;
     const fin = ok => { if (done) return; done = true; clearTimeout(to); if (!ok) l.remove(); res(ok); };
     const to = setTimeout(() => fin(false), 20000);
-    l.rel = 'stylesheet';
-    l.href = GF_BASE + specs.map(s => 'family=' + s).join('&') + '&display=swap';
-    l.onload = () => fin(true);
-    l.onerror = () => fin(false);
+    l.rel = 'stylesheet'; l.href = href;
+    l.onload = () => fin(true); l.onerror = () => fin(false);
     document.head.appendChild(l);
   });
+}
+function addCss(specs) {
+  if (BUILD === 'pages') return Promise.resolve(false);     // the installable build contacts no other site; all its fonts are hosted alongside
+  return linkCss(GF_BASE + specs.map(s => 'family=' + s).join('&') + '&display=swap');
 }
 /* the installable build hosts the fonts itself (and keeps downloaded packs on the device); Google Fonts only as a fallback */
 function addSelfCss(f) {
   const sf = SELF_FONTS[f.n];
-  return new Promise(res => {
-    const l = document.createElement('link');
-    let done = false;
-    const fin = ok => { if (done) return; done = true; clearTimeout(to); if (!ok) l.remove(); res(ok); };
-    const to = setTimeout(() => fin(false), 20000);
-    l.rel = 'stylesheet'; l.href = 'fonts/' + sf.id + '/' + sf.id + '.css';
-    l.onload = () => fin(true); l.onerror = () => fin(false);
-    document.head.appendChild(l);
-  });
+  return linkCss('fonts/' + sf.id + '/' + sf.id + '.css');
 }
 function ensureCss(fams) {
   const flat = [];

@@ -44,8 +44,6 @@ function pdfDrawPatch(L, page, vp, img, x, y, w, h) {
   page.pushOperators(L.pushGraphicsState(), L.concatTransformationMatrix(br[0] - bl[0], br[1] - bl[1], tl[0] - bl[0], tl[1] - bl[1], bl[0], bl[1]), L.drawObject(key), L.popGraphicsState());
 }
 
-/* ---------- the new text as text: which font writes it ---------- */
-const pdfEmbeddable = fam => (fam.stack || [fam]).every(m => !m.sys && !m.pdf && !!SELF_FONTS[m.n]);
 /* glyph names, for fonts that are not in the file (their characters are found through the encoding, by name) */
 const PDF_NAMES = { ' ': 'space', '!': 'exclam', '"': 'quotedbl', '#': 'numbersign', $: 'dollar', '%': 'percent', '&': 'ampersand', "'": 'quotesingle', '(': 'parenleft', ')': 'parenright', '*': 'asterisk', '+': 'plus', ',': 'comma', '-': 'hyphen', '.': 'period', '/': 'slash', ':': 'colon', ';': 'semicolon', '<': 'less', '=': 'equal', '>': 'greater', '?': 'question', '@': 'at', '[': 'bracketleft', '\\': 'backslash', ']': 'bracketright', '^': 'asciicircum', _: 'underscore', '`': 'grave', '{': 'braceleft', '|': 'bar', '}': 'braceright', '~': 'asciitilde', '’': 'quoteright', '‘': 'quoteleft', '“': 'quotedblleft', '”': 'quotedblright', '–': 'endash', '—': 'emdash', '•': 'bullet', '€': 'Euro', '£': 'sterling', '¥': 'yen', '©': 'copyright', '®': 'registered', '°': 'degree', '·': 'periodcentered' };
 const PDF_DIGITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
@@ -91,36 +89,6 @@ function pdfOwnPlan(info, byK, scan, content) {
     enc.set(ch, { hex: c.code.toString(16).padStart(2 * nb, '0'), adv: c.w * ref.fm0, font: st.font });
   }
   return { enc };
-}
-/* the @font-face rules of a library family: which file serves which characters */
-function pdfFaceRules(m) {
-  const id = SELF_FONTS[m.n].id;
-  if (!PDFS.css.has(id)) {
-    const p = fetch('fonts/' + id + '/' + id + '.css').then(r => (r.ok ? r.text() : '')).then(css => {
-      const rules = [];
-      for (const blk of css.split('@font-face').slice(1)) {
-        const w = /font-weight:\s*(\d+)/.exec(blk), url = /url\(['"]?([^'")]+\.woff2)['"]?\)/.exec(blk), st = /font-style:\s*(\w+)/.exec(blk), ur = /unicode-range:\s*([^;}]+)/.exec(blk);
-        if (!w || !url) continue;
-        const ranges = [];
-        for (const t of ur ? ur[1].split(',') : ['U+0-10FFFF']) { const q = /U\+([0-9A-Fa-f?]+)(?:-([0-9A-Fa-f]+))?/.exec(t); if (q) ranges.push([parseInt(q[1].replace(/\?/g, '0'), 16), parseInt(q[2] || q[1].replace(/\?/g, 'F'), 16)]); }
-        rules.push({ w: +w[1], style: st ? st[1] : 'normal', url: 'fonts/' + id + '/' + url[1], ranges });
-      }
-      return rules.reverse();          // of two rules that cover a character, the browser takes the later one
-    }).catch(() => []);
-    PDFS.css.set(id, p);
-    p.then(r => { if (!r.length) PDFS.css.delete(id); });
-  }
-  return PDFS.css.get(id);
-}
-/* a font file of the library, read → { bytes, fk } or null */
-function pdfFontFile(url) {
-  if (!PDFS.files.has(url)) {
-    const p = Promise.all([pdfFontkit(), fetch(url).then(r => (r.ok ? r.arrayBuffer() : null))]).then(([fk, buf]) => (buf ? { bytes: new Uint8Array(buf), fk: fk.create(new Uint8Array(buf)) } : null)).catch(() => null);
-    PDFS.files.set(url, p);
-    p.then(r => { if (!r) PDFS.files.delete(url); });
-    if (PDFS.files.size > 400) PDFS.files.clear();
-  }
-  return PDFS.files.get(url);
 }
 /* a library font, to be put into the file: the font file that holds each character → { enc } or { why } */
 async function pdfLibPlan(info) {

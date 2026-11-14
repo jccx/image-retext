@@ -3,8 +3,14 @@
    ===================================================================== */
 const GENERIC = new Set(['system-ui', 'ui-rounded', 'ui-serif', 'ui-monospace', 'sans-serif', 'serif', 'monospace', 'cursive']);
 const COMPLEX_RE = /[֐-ࣿऀ-෿฀-໿ក-៿]/;
-/* A PDF's own font can only be drawn through the codes pdf.js gave its glyphs; text is translated just before it is measured or drawn. */
-const encT = (fam, t) => (fam && fam.pdf ? pdfEnc(fam.pdf, t) : t);
+/* A font that came with a PDF can only be drawn through the codes pdf.js gave its glyphs (fam.pdf.map: character → { fc }, see pdf/fonts.js);
+   text is translated just before it is measured or drawn. Every other family draws the text as it is. */
+function encT(fam, t) {
+  if (!fam || !fam.pdf) return t;
+  let out = '';
+  for (const ch of t) { const e = fam.pdf.map.get(ch); out += e ? e.fc : ch; }
+  return out;
+}
 function famCss(fam) {
   if (fam.pdf) return fam.pdf.css;
   if (fam.stack) return fam.stack.map(f => (GENERIC.has(f.n) ? f.n : '"' + f.n + '"')).join(', ') + ', sans-serif';
@@ -41,4 +47,49 @@ function drawRun(ctx, text, ox, oy, tr, stroke, each) {
     }
     prefix += ch;
   }
+}
+const REF = 200; // reference px size for font metrics
+/* ink metrics of `text` in candidate c, per 1px of font size.
+   With nRuns > 1 and exactly that many words in the text, every word is measured on its own (see wordRuns). */
+function inkMetrics(c, text, nRuns) {
+  const ctx = mctx(8, 8);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.font = fontCss(c, REF);
+  const m = ctx.measureText(encT(c.fam, text));
+  const mk = (t, mm) => ({ text: t, L: mm.actualBoundingBoxLeft / REF, R: mm.actualBoundingBoxRight / REF, W: mm.width / REF, n: Array.from(t).length });
+  let runs = null;
+  if (nRuns > 1) { const ws = text.split(/\s+/).filter(Boolean); if (ws.length === nRuns) runs = ws.map(t => mk(t, ctx.measureText(encT(c.fam, t)))); }
+  if (!runs) runs = [mk(text, m)];
+  let inkW = 0, gaps = 0;
+  for (const r of runs) { inkW += r.L + r.R; gaps += r.n - 1; }
+  return { L: m.actualBoundingBoxLeft / REF, R: m.actualBoundingBoxRight / REF, A: m.actualBoundingBoxAscent / REF, D: m.actualBoundingBoxDescent / REF, W: m.width / REF, n: Array.from(text).length, runs, inkW, gaps };
+}
+/* =====================================================================
+   Rendering replacement text
+   ===================================================================== */
+function lineMetrics(st, text, px) {
+  const im = inkMetrics({ fam: st.fam, weight: st.weight, italic: st.italic }, text);
+  return { L: im.L * px, R: im.R * px, A: im.A * px, D: im.D * px, W: im.W * px, n: im.n };
+}
+/* text coverage (0..1) on a w×h canvas; lines: [{text, ox, oy}] */
+function textCoverage(st, lines, px, trPx, w, h, lineWidth, each) {
+  const ctx = mctx(w, h);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.font = fontCss(st, px);
+  ctx.fillStyle = INK; ctx.strokeStyle = INK;
+  ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+  if (lineWidth) ctx.lineWidth = lineWidth;
+  for (const ln of lines) {
+    if (!ln.text) continue;
+    const t = encT(st.fam, ln.text);
+    if (lineWidth) drawRun(ctx, t, ln.ox, ln.oy, trPx, true, each);
+    drawRun(ctx, t, ln.ox, ln.oy, trPx, false, each);
+  }
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const out = new Float32Array(w * h);
+  for (let i = 0, p = 3; i < out.length; i++, p += 4) out[i] = d[p] / 255;
+  return out;
 }

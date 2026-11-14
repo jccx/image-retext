@@ -11,8 +11,7 @@ function normRect(x0, y0, x1, y1) {
   const ay = clamp(Math.min(y0, y1), 0, S.ih), by = clamp(Math.max(y0, y1), 0, S.ih);
   return { x: ax, y: ay, w: bx - ax, h: by - ay };
 }
-function warmReader() { if (!S.sample && !OCR.p) Promise.race([S.sampleReady, new Promise(r => setTimeout(r, 1500))]).then(() => { if (!S.sample) ocrLoad(); }); }
-stage.addEventListener('pointerdown', e => {
+function pointerDown(e) {
   if (!S.img || e.target.closest('.zoom')) return;
   warmReader();
   if (e.pointerType === 'mouse' && e.button === 2) return;
@@ -32,8 +31,8 @@ stage.addEventListener('pointerdown', e => {
   else if (e.button === 1 || S.space) { S.drag = { type: 'pan', lx: p.x, ly: p.y }; stage.classList.add('panning'); }
   else { const q = toImg(p.x, p.y); S.drag = { type: 'new', sx: p.x, sy: p.y, ix: q.x, iy: q.y, rect: null, moved: false }; }
   e.preventDefault();
-});
-stage.addEventListener('pointermove', e => {
+}
+function pointerMove(e) {
   if (!S.pointers.has(e.pointerId)) return;
   const p = stagePt(e);
   S.pointers.set(e.pointerId, p);
@@ -55,7 +54,7 @@ stage.addEventListener('pointermove', e => {
     d.rect = normRect(d.ix, d.iy, q.x, q.y);
     requestDraw();
   } else if (d.type === 'resize') { d.moved = true; d.rect = handleRect(d, p); requestDraw(); }
-});
+}
 function endPointer(e) {
   if (!S.pointers.has(e.pointerId)) return;
   S.pointers.delete(e.pointerId);
@@ -70,10 +69,14 @@ function endPointer(e) {
   }
   requestDraw();
 }
-stage.addEventListener('pointerup', endPointer);
-stage.addEventListener('pointercancel', endPointer);
-stage.addEventListener('wheel', e => { if (!S.img) return; e.preventDefault(); const p = stagePt(e); zoomAt(p.x, p.y, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0016))); }, { passive: false });
-stage.addEventListener('contextmenu', e => e.preventDefault());
-$('zIn').onclick = () => zoomAt(S.vw / 2, S.vh / 2, 1.4);
-$('zOut').onclick = () => zoomAt(S.vw / 2, S.vh / 2, 1 / 1.4);
-$('zFit').onclick = fitView;
+function pointerInit() {
+  stage.addEventListener('pointerdown', pointerDown);
+  stage.addEventListener('pointermove', pointerMove);
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', endPointer);
+  stage.addEventListener('wheel', e => { if (!S.img) return; e.preventDefault(); const p = stagePt(e); zoomAt(p.x, p.y, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0016))); }, { passive: false });
+  stage.addEventListener('contextmenu', e => e.preventDefault());
+  $('zIn').onclick = () => zoomAt(S.vw / 2, S.vh / 2, 1.4);
+  $('zOut').onclick = () => zoomAt(S.vw / 2, S.vh / 2, 1 / 1.4);
+  $('zFit').onclick = fitView;
+}

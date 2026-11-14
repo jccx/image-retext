@@ -10,7 +10,7 @@
      pdf.js (Mozilla, Apache-2.0) draws pages and reports the glyphs; pdf-lib (MIT) writes the file;
      fontkit (MIT) cuts a library font down to the characters used.
    ===================================================================== */
-const PDFS = { libP: null, wrP: null, fkP: null, saving: false, out: null, css: new Map(), files: new Map(), findHit: null, log: null };
+const PDFS = { libP: null, wrP: null, fkP: null, saving: false, out: null, css: new Map(), files: new Map(), famDirty: false, log: null, bad: null };
 const PDF_DIR = 'pdf/';
 const pdfUrl = f => new URL(PDF_DIR + f, document.baseURI).href;
 
@@ -20,20 +20,6 @@ function pdfLib() {
     PDFS.libP.catch(() => { PDFS.libP = null; });
   }
   return PDFS.libP;
-}
-function pdfWriter() {
-  if (!PDFS.wrP) {
-    PDFS.wrP = new Promise((res, rej) => {
-      if (window.PDFLib) { res(window.PDFLib); return; }
-      const s = document.createElement('script');
-      s.src = pdfUrl('pdf-lib.min.js');
-      s.onload = () => (window.PDFLib ? res(window.PDFLib) : rej(new Error('pdf-lib')));
-      s.onerror = () => rej(new Error('pdf-lib'));
-      document.head.appendChild(s);
-    });
-    PDFS.wrP.catch(() => { PDFS.wrP = null; });
-  }
-  return PDFS.wrP;
 }
 function pdfScript(key, file, name) {
   if (!PDFS[key]) {
@@ -49,6 +35,7 @@ function pdfScript(key, file, name) {
   }
   return PDFS[key];
 }
+const pdfWriter = () => pdfScript('wrP', 'pdf-lib.min.js', 'PDFLib');
 const pdfFontkit = () => pdfScript('fkP', 'fontkit.umd.min.js', 'fontkit');
 const pdfDestroy = doc => { try { doc.loadingTask.destroy(); } catch (e) { /* already gone */ } };
 const isPdf = (blob, name) => /pdf/i.test(blob.type || '') || /\.pdf$/i.test(name || '');

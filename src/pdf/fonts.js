@@ -39,7 +39,6 @@ function pdfNoteFont(P, id, f, glyphs) {
     if (typeof u === 'string' && u && !m.has(u) && Array.from(u).length === 1 && Array.from(g.fontChar).length === 1) m.set(u, { fc: g.fontChar, code: g.originalCharCode, w: g.width });
   }
 }
-function pdfEnc(pdf, t) { let out = ''; for (const ch of t) { const e = pdf.map.get(ch); out += e ? e.fc : ch; } return out; }
 /* the characters of t that the PDF's font cannot draw */
 function pdfMissing(fam, t) {
   if (!fam.pdf || fam.pdf.whole) return '';
@@ -52,20 +51,6 @@ function pdfDropFonts() {
   for (const [k, f] of [...FAM.entries()]) if (f.pdf) { FAM.delete(k); any = true; }
   if (S.lastFam && S.lastFam.pdf) S.lastFam = null;
   if (any) buildFamilySelect();
-}
-/* look through the other pages (a 7 that page 1 lacks may be on page 5): more characters of the same fonts, which pages
-   have pictures, and the text to search */
-async function pdfScanFonts(P) {
-  for (let no = 1; no <= Math.min(P.n, 40); no++) {
-    await new Promise(r => setTimeout(r, 30));
-    if (S.pdf !== P) return;
-    if (P.lines.has(no)) continue;
-    await pdfPageLines(P, no);
-    if (S.pdf === P && no % 5 === 0) pdfFindInfo();
-  }
-  if (S.pdf !== P) return;
-  pdfFindInfo();
-  if (PDFS.famDirty) { PDFS.famDirty = false; buildFamilySelect(); }
 }
 /* The PDF's own font draws the new text while it has every character; otherwise the closest library font does, for the whole text. */
 function pdfFontFor(ed) {
@@ -97,6 +82,38 @@ function pdfFontNote(ed) {
   setStatus((el.textContent ? el.textContent + ' ' : '') + '这款是设备自带的字体，放不进 PDF：保存后这处是贴上去的图片。想要真正的文字，可以在“微调”里换一款字体库里的字体。', el.classList.contains('warn'));
 }
 
+/* ---------- the new text as text: which font writes it ---------- */
+const pdfEmbeddable = fam => (fam.stack || [fam]).every(m => !m.sys && !m.pdf && !!SELF_FONTS[m.n]);
+/* the @font-face rules of a library family: which file serves which characters */
+function pdfFaceRules(m) {
+  const id = SELF_FONTS[m.n].id;
+  if (!PDFS.css.has(id)) {
+    const p = fetch('fonts/' + id + '/' + id + '.css').then(r => (r.ok ? r.text() : '')).then(css => {
+      const rules = [];
+      for (const blk of css.split('@font-face').slice(1)) {
+        const w = /font-weight:\s*(\d+)/.exec(blk), url = /url\(['"]?([^'")]+\.woff2)['"]?\)/.exec(blk), st = /font-style:\s*(\w+)/.exec(blk), ur = /unicode-range:\s*([^;}]+)/.exec(blk);
+        if (!w || !url) continue;
+        const ranges = [];
+        for (const t of ur ? ur[1].split(',') : ['U+0-10FFFF']) { const q = /U\+([0-9A-Fa-f?]+)(?:-([0-9A-Fa-f]+))?/.exec(t); if (q) ranges.push([parseInt(q[1].replace(/\?/g, '0'), 16), parseInt(q[2] || q[1].replace(/\?/g, 'F'), 16)]); }
+        rules.push({ w: +w[1], style: st ? st[1] : 'normal', url: 'fonts/' + id + '/' + url[1], ranges });
+      }
+      return rules.reverse();          // of two rules that cover a character, the browser takes the later one
+    }).catch(() => []);
+    PDFS.css.set(id, p);
+    p.then(r => { if (!r.length) PDFS.css.delete(id); });
+  }
+  return PDFS.css.get(id);
+}
+/* a font file of the library, read → { bytes, fk } or null */
+function pdfFontFile(url) {
+  if (!PDFS.files.has(url)) {
+    const p = Promise.all([pdfFontkit(), fetch(url).then(r => (r.ok ? r.arrayBuffer() : null))]).then(([fk, buf]) => (buf ? { bytes: new Uint8Array(buf), fk: fk.create(new Uint8Array(buf)) } : null)).catch(() => null);
+    PDFS.files.set(url, p);
+    p.then(r => { if (!r) PDFS.files.delete(url); });
+    if (PDFS.files.size > 400) PDFS.files.clear();
+  }
+  return PDFS.files.get(url);
+}
 /* the characters of t that a library family cannot draw (the browser would use some other font for them).
    The font files themselves are asked: a family's style sheet claims some characters its files do not have. */
 async function pdfUncovered(fam, weight, italic, t) {
@@ -165,7 +182,7 @@ function pdfExact(ed, text, T) {
   const ctx = mctx(T.tw, T.th);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, T.tw, T.th);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = INK;
-  for (const q of gs) { ctx.font = fontCss(c, q.rec.h * T.ky); ctx.fillText(pdfEnc(fam.pdf, String(q.u)), (q.a[0] - ed.rect.x - T.offX) * T.kx, (q.a[1] - ed.rect.y - T.offY) * T.ky); }
+  for (const q of gs) { ctx.font = fontCss(c, q.rec.h * T.ky); ctx.fillText(encT(fam, String(q.u)), (q.a[0] - ed.rect.x - T.offX) * T.kx, (q.a[1] - ed.rect.y - T.offY) * T.ky); }
   const d = ctx.getImageData(0, 0, T.tw, T.th).data, buf = new Uint8Array(T.tw * T.th);
   let sum = 0;
   for (let i = 0, p = 3; i < buf.length; i++, p += 4) { buf[i] = d[p]; sum += d[p]; }
@@ -174,16 +191,3 @@ function pdfExact(ed, text, T) {
   return r;
 }
 
-/* the text under a selection, straight from the PDF → { text, hint, fam } or null when the page has no usable text there */
-function pdfReadEdit(ed) {
-  const P = S.pdf, pg = P && P.pages.get(P.cur);
-  if (!pg) return null;
-  if (pdfTouched(ed.userRect)) return null;        // an earlier edit changed this spot: the file's text no longer describes it
-  const r = pdfTextIn(pg.map, ed.userRect);
-  if (!r.text || r.bad) return null;
-  /* one font for the whole selection: that font itself can be tried */
-  const ids = new Set();
-  for (const g of pdfGlyphsIn(pg.map, ed.userRect)) if (String(g.u || '').trim()) ids.add(g.rec.font);
-  if (PDFS.famDirty) { PDFS.famDirty = false; buildFamilySelect(); }
-  return { text: r.text, hint: pdfFontHint(r.fonts[0]), fam: ids.size === 1 ? P.fonts.get([...ids][0]) || null : null, lines: r.lines };
-}

@@ -20,7 +20,7 @@ function analyzeEdit(ed, keepGrow) {
   if (S.pdf) pdfProtect(ed);
   ed.bands = findBands(ed.an.alpha, ed.an.w, ed.an.h, ed.origLines.length || 0);
 }
-function startEdit(userRect, keep) {
+function startEdit(userRect, keep, hit) {
   const prev = S.edit;
   let carry = null;
   if (prev) {
@@ -29,17 +29,21 @@ function startEdit(userRect, keep) {
     if (S.edit) { S.edit.matchToken++; restoreLive(); }
   }
   const ed = {
-    userRect, rect: null, an: null, bands: [], origText: carry ? carry.origText : '', newText: carry ? carry.newText : '',
-    origLines: carry ? carry.origLines : [], cands: [], fit: [], matchToken: 0, tier: carry ? carry.tier : 1, live: null, primary: 0, T2: null, userColor: false,
-    find: carry ? carry.find : PDFS.findHit || null          // the occurrence of a searched text this edit is for
+    userRect, rect: null, an: null, bands: [], st: null,
+    origText: carry ? carry.origText : '', newText: carry ? carry.newText : '', origLines: carry ? carry.origLines : [],
+    ocr: null, varDone: false,
+    cands: [], fit: [], matchToken: 0, tier: carry ? carry.tier : 1, primary: 0, primaryText: '', T2: null, T2c: null,
+    live: null, userColor: false,
+    pdfHint: null, pdfFam: null, pdfLines: null, pdfAlt: false,
+    find: carry ? carry.find : hit || null
   };
-  PDFS.findHit = null;
   S.edit = ed;
   analyzeEdit(ed, null);
   const b0 = ed.bands[0];
   ed.st = {
     fam: S.lastFam || FAM.get('sans-serif'), weight: 400, italic: false, px: b0 ? (b0.y1 - b0.y0) / 0.72 : ed.rect.h * 0.6,
-    trEm: 0, color: ed.an.color.slice(), blur: 0, align: 'left', dx: 0, dy: 0, sizeAdj: 1, trAdj: 0, matched: false, geo: null, score: null
+    trEm: 0, color: ed.an.color.slice(), blur: 0, align: 'left', dx: 0, dy: 0, sizeAdj: 1, trAdj: 0, matched: false, geo: null, score: null,
+    famUser: false, weightUser: false, alignUser: false
   };
   $('pIdle').hidden = true; $('pEdit').hidden = false;
   $('inOrig').value = ed.origText; $('inNew').value = ed.newText;

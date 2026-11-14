@@ -30,7 +30,7 @@ const count = (hay, needle) => hay.split(needle).length - 1;
     const found = await p.evaluate(() => ({ n: window.__app.S.pdf.find.hits.length, pages: [...new Set(window.__app.S.pdf.find.hits.map(h => h.no))], info: document.getElementById('findInfo').textContent }));
     const steps = [];
     for (let i = 0; i < found.n + 2; i++) {
-      const left = await p.evaluate(() => pdfFindLeft());
+      const left = await p.evaluate(() => findLeft());
       if (left <= 0) break;
       await p.click('#findNext');
       await p.waitForFunction(() => { const ed = window.__app.S.edit, st = document.getElementById('matchStatus').textContent; return ed && ed.origText && ed.st.matched && ed.cands.length && !/正在/.test(st); }, null, { timeout: 60000 });
@@ -43,7 +43,7 @@ const count = (hay, needle) => hay.split(needle).length - 1;
       await p.evaluate(() => window.__app.commit('text', false));
       await p.waitForTimeout(60);
     }
-    return { found, steps, left: await p.evaluate(() => pdfFindLeft()), info: await p.evaluate(() => document.getElementById('findInfo').textContent), toast: await p.evaluate(() => document.getElementById('toast').textContent) };
+    return { found, steps, left: await p.evaluate(() => findLeft()), info: await p.evaluate(() => document.getElementById('findInfo').textContent), toast: await p.evaluate(() => document.getElementById('toast').textContent) };
   };
   const a = await run('harbor  street studio', 'Lakeside Print Works');
   console.log('    ', a.found.info);
@@ -56,7 +56,7 @@ const count = (hay, needle) => hay.split(needle).length - 1;
   const b = await run('海港街工作室', '湖畔印务');
   if (process.env.DEBUG) console.log(JSON.stringify(b.steps));
   check(b.found.n === 2 && b.steps.length === 2 && b.left === 0, 'Chinese: 2 occurrences found and replaced (' + b.found.n + ')');
-  const none = await p.evaluate(async () => { await pdfFind('no such words'); return document.getElementById('findInfo').textContent; });
+  const none = await p.evaluate(async () => { await findAll('no such words'); return document.getElementById('findInfo').textContent; });
   check(/没有找到/.test(none), 'a text that is not there: ' + none.slice(0, 24));
   const saved = await p.evaluate(async () => { const o = await pdfBuild(false); let s = ''; for (let i = 0; i < o.bytes.length; i += 32768) s += String.fromCharCode.apply(null, o.bytes.subarray(i, i + 32768)); 
     /* the saved file's text as pdf.js reads it (poppler has no table for the non-embedded Chinese font of this sample) */

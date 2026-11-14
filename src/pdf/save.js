@@ -37,7 +37,7 @@ async function pdfSave() {
     const blob = new Blob([out.bytes], { type: 'application/pdf' }), filename = P.name + '-改字.pdf';
     if (PDFS.out) URL.revokeObjectURL(PDFS.out.url);
     PDFS.out = { url: URL.createObjectURL(blob), report: out.report, size: blob.size };
-    const fl = pdfFindLeft();
+    const fl = findLeft();
     $('sheetHow').textContent = pdfReportText(out.report) + '（' + mb(blob.size) + '）' + (fl > 0 ? ' 提醒：查找的“' + P.find.q + '”还有 ' + fl + ' 处没改。' : '');
     if (out.report.whole) { $('pdfFlat').checked = true; $('pdfFlat').disabled = true; }
     const file = typeof File === 'function' ? new File([blob], filename, { type: 'application/pdf' }) : null;
@@ -62,11 +62,5 @@ function pdfInit() {
   $('pgNext').onclick = () => { if (S.pdf) pdfGo(S.pdf.cur + 1); };
   $('pgNum').onclick = () => { const P = S.pdf; if (!P || P.n < 2) return; const v = window.prompt('跳到第几页？（1 – ' + P.n + '）', String(P.cur)); if (v != null && +v >= 1) pdfGo(+v); };
   $('pdfFlat').onchange = () => { PDFS.out = null; pdfSave(); };
-  $('findGo').onclick = () => pdfFind($('findIn').value);
-  $('findIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('findIn').blur(); pdfFind($('findIn').value); } });
-  $('findIn').addEventListener('search', () => { if (!$('findIn').value) pdfFind(''); });
-  $('ocrGo').onclick = () => pdfOcrRun();
-  $('findNext').onclick = () => pdfFindStep(1);
-  $('findPrev').onclick = () => pdfFindStep(-1);
   for (const el of [$('pgPrev'), $('pgNext'), $('pgNum')]) el.addEventListener('pointerdown', e => e.stopPropagation());
 }

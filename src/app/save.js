@@ -5,8 +5,8 @@ async function save() {
   $('sheetTitle').textContent = '保存图片'; $('saveNote').textContent = '修改后的图片请合法使用，后果由使用者自负。'; $('sheetHow').textContent = '长按下面的图片选“存储到照片”；电脑上右键选“图片另存为”。';
   $('pdfOpts').hidden = true; $('sheetImg').parentElement.hidden = false; $('sheetShare').textContent = '存到相册 / 分享'; $('sheetLink').textContent = '直接下载';
   if (S.edit && S.edit.live) commit('text', true);
-  const findLeft = pdfFindLeft();
-  if (findLeft > 0) $('saveNote').textContent += ' 提醒：查找的“' + S.pic.find.q + '”还有 ' + findLeft + ' 处没改。';
+  const left = findLeft();
+  if (left > 0) $('saveNote').textContent += ' 提醒：查找的“' + S.pic.find.q + '”还有 ' + left + ' 处没改。';
   const jpg = S.type === 'image/jpeg';
   const blob = await new Promise(res => S.img.toBlob(res, S.type, jpg ? 0.95 : undefined));
   if (!blob) { toast('生成图片失败'); return; }
@@ -28,5 +28,8 @@ async function save() {
   $('sheetLink').href = url; $('sheetLink').download = filename;
   $('sheet').hidden = false;
 }
-$('btnSave').onclick = save;
-$('sheetClose').onclick = () => { $('sheet').hidden = true; const u = $('sheetImg').src; $('sheetImg').removeAttribute('src'); if (u) URL.revokeObjectURL(u); };
+/* the save button and the sheet that shows the result */
+function saveInit() {
+  $('btnSave').onclick = save;
+  $('sheetClose').onclick = () => { $('sheet').hidden = true; const u = $('sheetImg').src; $('sheetImg').removeAttribute('src'); if (u) URL.revokeObjectURL(u); };
+}

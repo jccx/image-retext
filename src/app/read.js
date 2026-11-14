@@ -112,3 +112,13 @@ async function recognize(tier) {
     else setStatus('');
   } finally { $('btnOcr').disabled = false; }
 }
+/* read the selection on the device; null when the reader cannot run */
+async function readLocal(ed) {
+  const ok = await ocrLoad(t => { if (S.edit === ed) setStatus(t); });
+  if (!ok || S.edit !== ed) return null;
+  setStatus('正在读出框里的文字…');
+  await tick(); await tick();
+  if (S.edit !== ed) return null;
+  return ocrReadLines(ed.an, ed.bands);
+}
+function warmReader() { if (!S.sample && !OCR.p) Promise.race([S.sampleReady, new Promise(r => setTimeout(r, 1500))]).then(() => { if (!S.sample) ocrLoad(); }); }

@@ -1,9 +1,3 @@
-/* =====================================================================
-   core.js — pixel analysis, background repair, font matching, re-render
-   ===================================================================== */
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const REF = 200; // reference px size for font metrics
-
 /* ---------- multigrid Laplace fill: fills pixels where M[i]==1 ---------- */
 function inpaintRGB(R, G, B, M, w, h, iters) {
   const n = w * h;

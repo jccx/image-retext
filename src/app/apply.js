@@ -63,7 +63,7 @@ function commit(mode, quiet) {
   S.lastFam = ed.st.fam;
   S.edit = null;
   $('pEdit').hidden = true; $('pIdle').hidden = false;
-  const left = pdfFindApplied(ed, mode);
+  const left = findApplied(ed, mode);
   if (!quiet) toast(mode === 'erase' ? '已擦除。可以继续框选' : left > 0 ? '已应用。查找的文字还剩 ' + left + ' 处没改' : left === 0 ? '已应用。查找到的几处都改完了' : '已应用。可以继续框选其它文字');
   requestDraw();
 }
@@ -74,6 +74,6 @@ function undo() {
   S.ictx.putImageData(u.data, u.x, u.y);
   PDFS.out = null;
   $('btnUndo').disabled = !S.undo.length;
-  pdfFindInfo();
+  findRender();
   requestDraw();
 }
